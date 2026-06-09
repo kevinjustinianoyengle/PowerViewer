@@ -1,0 +1,9 @@
+# PowerViewer dependencies — Python-centric stack, no npm required.
+dash>=4.0
+plotly>=6.0
+pandas>=2.0
+numpy>=1.26
+scipy>=1.11
+openpyxl>=3.1     # .xlsx / .xls reading
+kaleido>=1.0      # server-side PNG export for screenshots saved into the repo
+python-dotenv>=1.0  # load settings from a local .env (optional but recommended)

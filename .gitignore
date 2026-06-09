@@ -1,0 +1,49 @@
+# ───────────────────────── Python ─────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# ───────────────────── Local configuration ────────────────
+# Real environment file with local settings — never committed.
+# A committed template lives in .env.example.
+.env
+.env.*
+!.env.example
+
+# ───────────────────────── Data ───────────────────────────
+# User data dropped into "1. Data/" may be large or private, so it is ignored
+# by default. The folder itself and the bundled demo file are kept so the app
+# is runnable straight after cloning.
+1. Data/*
+!1. Data/.gitkeep
+!1. Data/sample_signals.csv
+
+# ────────────────────── IDE / Editor ──────────────────────
+.vscode/
+.idea/
+*.swp
+
+# ─────────────────────────── OS ───────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─────────────────────── Screenshots ──────────────────────
+# Server-side screenshots are written into "2. Screenshots/". They are kept
+# tracked by design (saving into the repo is a product requirement); only the
+# empty-folder marker is needed for a fresh clone. Comment the next line back in
+# if you would rather NOT commit generated PNGs.
+# 2. Screenshots/*.png

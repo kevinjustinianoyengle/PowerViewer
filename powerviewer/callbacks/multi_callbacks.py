@@ -1,0 +1,144 @@
+"""Callbacks for the Multiple Trend viewer (series-list model).
+
+Each curve is a series ``{id, source, transform, name, color, scale, displace}``.
+Variables add raw series (handled in ``variables.py``); here we render the cards,
+apply edits, add derivative/integral series, delete series, and draw the figure.
+"""
+
+from __future__ import annotations
+
+import uuid
+
+from dash import ALL, Dash, Input, Output, State, ctx
+from dash.exceptions import PreventUpdate
+
+from ..config import palette_color
+from ..data import load_dataframe
+from ..graphs import multi_trend
+from ..ui.cards import render_series_cards
+
+PREFIX = "mt"
+
+
+def _find(series, sid):
+    for s in series:
+        if s["id"] == sid:
+            return s
+    return None
+
+
+def register(app: Dash) -> None:
+
+    # --- Figure ------------------------------------------------------------ #
+    @app.callback(
+        Output("multi-graph", "figure"),
+        Input("multi-store", "data"),
+        Input("marks-store", "data"),
+        Input("labels-store", "data"),
+        State("current-file", "data"),
+        State("current-table", "data"),
+    )
+    def render(store, marks, labels, filename, table):
+        store = store or {}
+        series = store.get("series") or []
+        df = load_dataframe(filename, table) if filename else None
+        fig = multi_trend.build_figure(
+            df, store.get("x"), series,
+            marks=(marks or {}).get("multi_trend"),
+            labels=(labels or {}).get("multi_trend"))
+        fig.update_layout(uirevision="|".join(s["id"] for s in series) or "empty")
+        return fig
+
+    # --- Cards ------------------------------------------------------------- #
+    @app.callback(
+        Output("multi-line-controls", "children"),
+        Input("multi-store", "data"),
+    )
+    def cards(store):
+        return render_series_cards((store or {}).get("series") or [], PREFIX)
+
+    # --- Edit name / colour / scale / displace ----------------------------- #
+    @app.callback(
+        Output("multi-store", "data", allow_duplicate=True),
+        Input({"type": f"{PREFIX}-name", "index": ALL}, "value"),
+        Input({"type": f"{PREFIX}-color", "index": ALL}, "value"),
+        Input({"type": f"{PREFIX}-scale", "index": ALL}, "value"),
+        Input({"type": f"{PREFIX}-displace", "index": ALL}, "value"),
+        State("multi-store", "data"),
+        prevent_initial_call=True,
+    )
+    def edit(names, colors, scales, displaces, store):
+        if not ctx.triggered:
+            raise PreventUpdate
+        store = dict(store or {})
+        original = store.get("series") or []
+        series = [dict(s) for s in original]
+        for i, s in enumerate(series):
+            if i < len(names):
+                s["name"] = names[i] or ""
+            if i < len(colors) and colors[i]:
+                s["color"] = colors[i]
+            if i < len(scales):
+                s["scale"] = float(scales[i]) if scales[i] not in (None, "") \
+                    else s.get("scale", 1.0)
+            if i < len(displaces):
+                s["displace"] = float(displaces[i]) if displaces[i] not in (None, "") \
+                    else s.get("displace", 0.0)
+        # Re-render of the cards re-fires these inputs; bail if nothing changed
+        # so we don't loop.
+        if series == original:
+            raise PreventUpdate
+        store["series"] = series
+        return store
+
+    # --- Add derivative / integral of a series' source --------------------- #
+    def _add(kind, store):
+        trig = ctx.triggered_id
+        if not trig or not ctx.triggered or not ctx.triggered[0]["value"]:
+            raise PreventUpdate
+        store = dict(store or {})
+        series = list(store.get("series") or [])
+        src = (_find(series, trig["index"]) or {}).get("source")
+        if not src:
+            raise PreventUpdate
+        label = "d/dx" if kind == "derivative" else "∫"
+        series.append({"id": uuid.uuid4().hex[:8], "source": src,
+                       "transform": kind, "name": f"{label}({src})",
+                       "color": palette_color(len(series)), "scale": 1.0,
+                       "displace": 0.0})
+        store["series"] = series
+        return store
+
+    @app.callback(
+        Output("multi-store", "data", allow_duplicate=True),
+        Input({"type": f"{PREFIX}-add-d", "index": ALL}, "n_clicks"),
+        State("multi-store", "data"),
+        prevent_initial_call=True,
+    )
+    def add_derivative(_c, store):
+        return _add("derivative", store)
+
+    @app.callback(
+        Output("multi-store", "data", allow_duplicate=True),
+        Input({"type": f"{PREFIX}-add-i", "index": ALL}, "n_clicks"),
+        State("multi-store", "data"),
+        prevent_initial_call=True,
+    )
+    def add_integral(_c, store):
+        return _add("integral", store)
+
+    # --- Delete a series --------------------------------------------------- #
+    @app.callback(
+        Output("multi-store", "data", allow_duplicate=True),
+        Input({"type": f"{PREFIX}-del", "index": ALL}, "n_clicks"),
+        State("multi-store", "data"),
+        prevent_initial_call=True,
+    )
+    def delete(_c, store):
+        trig = ctx.triggered_id
+        if not trig or not ctx.triggered or not ctx.triggered[0]["value"]:
+            raise PreventUpdate
+        store = dict(store or {})
+        store["series"] = [s for s in (store.get("series") or [])
+                           if s["id"] != trig["index"]]
+        return store
