@@ -115,6 +115,25 @@ def palette_color(index: int) -> str:
     return ORANGE_PALETTE[index % len(ORANGE_PALETTE)]
 
 
+# Distinct (blue/teal) palette for series moved to the SECONDARY (right) Y axis,
+# so it is obvious at a glance which scale a trend belongs to.
+SECONDARY_PALETTE = [
+    "#1F6FEB",
+    "#3FB7C4",
+    "#5AC8FA",
+    "#1A7F8E",
+    "#7AA2F7",
+    "#2D9CDB",
+    "#0E7490",
+    "#56B6C2",
+]
+
+
+def secondary_color(index: int) -> str:
+    """Return a blue/teal tone for the *index*-th right-axis trend."""
+    return SECONDARY_PALETTE[index % len(SECONDARY_PALETTE)]
+
+
 # --------------------------------------------------------------------------- #
 # Theme tokens (kept here so graphs and UI share one source of truth)
 # --------------------------------------------------------------------------- #

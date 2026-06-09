@@ -12,7 +12,7 @@ import uuid
 from dash import ALL, Dash, Input, Output, State, ctx
 from dash.exceptions import PreventUpdate
 
-from ..config import palette_color
+from ..config import palette_color, secondary_color
 from ..data import load_dataframe
 from ..graphs import multi_trend
 from ..ui.cards import render_series_cards
@@ -55,19 +55,21 @@ def register(app: Dash) -> None:
         Input("multi-store", "data"),
     )
     def cards(store):
-        return render_series_cards((store or {}).get("series") or [], PREFIX)
+        return render_series_cards((store or {}).get("series") or [], PREFIX,
+                                   allow_axis=True)
 
-    # --- Edit name / colour / scale / displace ----------------------------- #
+    # --- Edit name / colour / scale / displace / axis ---------------------- #
     @app.callback(
         Output("multi-store", "data", allow_duplicate=True),
         Input({"type": f"{PREFIX}-name", "index": ALL}, "value"),
         Input({"type": f"{PREFIX}-color", "index": ALL}, "value"),
         Input({"type": f"{PREFIX}-scale", "index": ALL}, "value"),
         Input({"type": f"{PREFIX}-displace", "index": ALL}, "value"),
+        Input({"type": f"{PREFIX}-axis", "index": ALL}, "value"),
         State("multi-store", "data"),
         prevent_initial_call=True,
     )
-    def edit(names, colors, scales, displaces, store):
+    def edit(names, colors, scales, displaces, axes, store):
         if not ctx.triggered:
             raise PreventUpdate
         store = dict(store or {})
@@ -84,9 +86,17 @@ def register(app: Dash) -> None:
             if i < len(displaces):
                 s["displace"] = float(displaces[i]) if displaces[i] not in (None, "") \
                     else s.get("displace", 0.0)
-        # Re-render of the cards re-fires these inputs; bail if nothing changed
-        # so we don't loop.
-        if series == original:
+            if i < len(axes) and axes[i] in ("left", "right"):
+                new_axis = axes[i]
+                if new_axis != s.get("axis", "left"):
+                    # Recolour from the axis-specific palette so it's obvious
+                    # which scale a moved trend belongs to.
+                    s["axis"] = new_axis
+                    n = sum(1 for ss in series[:i]
+                            if ss.get("axis", "left") == new_axis)
+                    s["color"] = (secondary_color(n) if new_axis == "right"
+                                  else palette_color(n))
+        if series == original:  # re-render re-fires inputs; bail if unchanged
             raise PreventUpdate
         store["series"] = series
         return store

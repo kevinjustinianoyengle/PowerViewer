@@ -21,20 +21,32 @@ INTEGRAL = "integral"
 LABELS = {NONE: "Raw", DERIVATIVE: "d/dx", INTEGRAL: "∫ dx"}
 
 
+# For a datetime X axis the transforms use elapsed time in HOURS, so that on
+# time-series data the integral of e.g. power (kW) is energy (kW·h) and the
+# derivative is a per-hour rate. (Change _NS_PER_UNIT to 1e9 for seconds.)
+_NS_PER_UNIT = 3.6e12  # nanoseconds in one hour
+
+
 def _to_numeric_x(x: pd.Series) -> np.ndarray:
     """Return X as a float array suitable for differentiation/integration.
 
-    Datetime axes are converted to seconds; anything non-numeric falls back to
-    the sample index so a transform is still possible.
+    Datetime axes are converted to **elapsed hours from the first sample**
+    (NaT-safe: missing timestamps become NaN, not a huge sentinel). Non-numeric,
+    non-datetime axes fall back to the row index so a transform is still possible.
+    The actual (possibly non-uniform) spacing between timestamps is preserved, so
+    np.gradient / cumulative_trapezoid integrate against real time.
     """
-    if pd.api.types.is_datetime64_any_dtype(x):
-        # Normalise to nanoseconds since epoch, then to seconds (works across
-        # datetime64 units; Series.view was removed in pandas 3.0).
-        ns = x.to_numpy().astype("datetime64[ns]").astype("int64")
-        return ns / 1e9
-    num = pd.to_numeric(x, errors="coerce")
+    xs = x if isinstance(x, pd.Series) else pd.Series(x)
+    if pd.api.types.is_datetime64_any_dtype(xs):
+        # datetime64 -> float ns turns NaT into NaN (astype to int would give a
+        # huge sentinel and corrupt the maths).
+        ns = xs.to_numpy().astype("datetime64[ns]").astype("float64")
+        if np.isnan(ns).all():
+            return np.arange(len(xs), dtype=float)
+        return (ns - np.nanmin(ns)) / _NS_PER_UNIT
+    num = pd.to_numeric(xs, errors="coerce")
     if num.isna().all():
-        return np.arange(len(x), dtype=float)
+        return np.arange(len(xs), dtype=float)
     return num.to_numpy(dtype=float)
 
 

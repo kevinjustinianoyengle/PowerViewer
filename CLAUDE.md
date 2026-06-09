@@ -136,16 +136,22 @@ variables panel on the right is intentionally narrow (15% slimmer than default).
 ### Series model (shared by both Trend viewers)
 
 Both trend viewers draw a **list of series** (`graphs/series_figure.py`). A series
-is `{id, source, transform, name, color, scale, displace}` where `transform` is
-`none` / `derivative` / `integral`. So a derivative or integral is **just another
-series over the same source column** — Raw + d/dx + ∫ can all be shown at once,
-each as its own **card** with an **editable name**, **colour**, **scale** and
-**displacement** (cards rendered by `ui/cards.py`, namespaced `tr`/`mt`). Per
-series, maths is applied in the order *transform → scale → displacement*. Each
-card has **+d/dx**, **+∫** (add a derivative/integral of that card's source as a
-brand-new series) and **✕** (delete). The integral's total value is shown in its
-legend entry. Clearing a scale/displacement box keeps the previous value
-(identity fallback scale 1, displacement 0).
+is `{id, source|sources, transform, name, color, scale, displace, axis}` where
+`transform` is `none` / `derivative` / `integral`. So a derivative or integral is
+**just another series over the same source column** — Raw + d/dx + ∫ can all be
+shown at once, each as its own **card** with an **editable name**, **colour**,
+**scale** and **displacement** (cards rendered by `ui/cards.py`, namespaced
+`tr`/`mt`). Per series, maths is applied in the order *transform → scale →
+displacement*. Each card has **+d/dx**, **+∫** (add a derivative/integral of that
+card's source as a brand-new series) and **✕** (delete). The integral's total
+value is shown in its legend entry. Clearing a scale/displacement box keeps the
+previous value (identity fallback scale 1, displacement 0).
+
+**Time-aware maths** (`graphs/transforms.py`): derivative and integral integrate
+against the **real timestamps**. For a datetime X axis, time is measured in
+**elapsed hours** (NaT-safe), so e.g. the integral of power (kW) is energy
+(kW·h) and the derivative is a per-hour rate; non-uniform sample spacing is
+respected. Switch `_NS_PER_UNIT` to `1e9` for seconds.
 
 ### 2. Trend (`graphs/trend.py`)
 - Exactly **one X** and **one Y** source. **First** click → X, **second** → Y;
@@ -164,6 +170,11 @@ legend entry. Clearing a scale/displacement box keeps the previous value
   shared builder sums those columns, then applies transform → scale → displace,
   so you can also take the derivative/integral of a sum. Sum cards show a **Σ**
   badge. (Sum is Multiple-Trend only.)
+- **Two Y axes**: each card has a **Y ◀ / Y ▶** selector assigning its series to
+  the left (primary) or right (secondary) axis, so trends with very different
+  scales are both readable. Each axis auto-fits independently. Series moved to the
+  right axis are recoloured from a distinct blue/teal palette
+  (`config.SECONDARY_PALETTE`) so it's obvious which scale a trend belongs to.
 - Default colours come from `config.ORANGE_PALETTE` (recolourable per card).
 - The **Y axis auto-fits dynamically** to the highest/lowest *displayed* values.
 - Adding/removing a series **restarts the view** (figure `uirevision` keyed to

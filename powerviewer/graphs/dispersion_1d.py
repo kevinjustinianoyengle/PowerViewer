@@ -60,16 +60,31 @@ def build_figure(
     marks: Optional[list] = None,
     fit_colors: Optional[Dict[str, str]] = None,
     labels: Optional[dict] = None,
+    times: Optional[np.ndarray] = None,
 ) -> go.Figure:
-    """Build the 1D dispersion figure."""
+    """Build the 1D dispersion figure.
+
+    *times* (optional) is the per-row timestamp aligned with *values*; when
+    present, hovering a sample shows the **time** of that sample.
+    """
     if values is None or column is None:
         return empty_figure("Select ONE variable on the right to view its "
                             "1D dispersion.")
 
     values = np.asarray(values, dtype=float)
-    values = values[np.isfinite(values)]
+    mask = np.isfinite(values)
+    values = values[mask]
+    if times is not None:
+        times = np.asarray(times)[mask]
     if values.size == 0:
         return empty_figure(f"'{column}' has no numeric values to plot.")
+
+    # Hover for the sample points: show the timestamp when we have one.
+    if times is not None:
+        sample_hover = ("time=%{customdata|%Y-%m-%d %H:%M:%S}"
+                        "<br>value=%{x:.4g}<extra></extra>")
+    else:
+        sample_hover = "value=%{x}<extra>sample</extra>"
 
     distributions = distributions or []
     fit_colors = fit_colors or {}
@@ -122,8 +137,8 @@ def build_figure(
         fig.add_trace(go.Scatter(
             x=values, y=y_pts, mode="markers",
             marker=dict(color=color, size=4, opacity=0.45),
-            name="samples",
-            hovertemplate="value=%{x}<extra>sample</extra>",
+            name="samples", customdata=times,
+            hovertemplate=sample_hover,
         ))
         fig.update_layout(yaxis2=dict(overlaying="y", visible=False))
     else:
@@ -133,8 +148,8 @@ def build_figure(
             y=-0.06 * np.ones_like(values) - 0.04 * jitter,
             mode="markers",
             marker=dict(color=THEME["muted"], size=5, opacity=0.5),
-            name="samples", yaxis="y2",
-            hovertemplate="value=%{x}<extra>sample</extra>",
+            name="samples", yaxis="y2", customdata=times,
+            hovertemplate=sample_hover,
         ))
         fig.update_layout(yaxis2=dict(overlaying="y", visible=False,
                                       range=[-0.15, 1]))

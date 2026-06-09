@@ -47,7 +47,8 @@ def build(
         return empty_figure(empty_msg)
 
     fig = base_figure(title)
-    y_min = y_max = None
+    # Track extents per axis ("left" -> primary y, "right" -> secondary y2).
+    extents = {"left": [None, None], "right": [None, None]}
     plotted = False
 
     for s in series:
@@ -76,25 +77,43 @@ def build(
             # The integral's total value is its curve endpoint; surface it.
             name = f"{name} [∫={total:.3g}]"
 
+        axis = "right" if s.get("axis") == "right" else "left"
+        ext = extents[axis]
         col_min, col_max = float(y.min()), float(y.max())
-        y_min = col_min if y_min is None else min(y_min, col_min)
-        y_max = col_max if y_max is None else max(y_max, col_max)
+        ext[0] = col_min if ext[0] is None else min(ext[0], col_min)
+        ext[1] = col_max if ext[1] is None else max(ext[1], col_max)
         plotted = True
 
         fig.add_trace(go.Scatter(
             x=data[x_col], y=y, mode="lines",
             line=dict(color=s.get("color") or THEME["accent"], width=2),
             name=name,
+            yaxis="y2" if axis == "right" else "y",
             hovertemplate=f"{x_col}=%{{x}}<br>{name}=%{{y}}<extra></extra>",
         ))
 
     if not plotted:
         return empty_figure(f"No numeric data to plot against '{x_col}'.")
 
-    if y_min is not None and y_max is not None:
-        span = y_max - y_min
-        pad = span * 0.05 if span else (abs(y_max) * 0.05 or 1.0)
-        fig.update_yaxes(range=[y_min - pad, y_max + pad])
+    def _range(ext):
+        lo, hi = ext
+        if lo is None or hi is None:
+            return None
+        span = hi - lo
+        pad = span * 0.05 if span else (abs(hi) * 0.05 or 1.0)
+        return [lo - pad, hi + pad]
+
+    left_range = _range(extents["left"])
+    if left_range:
+        fig.update_yaxes(range=left_range)
+
+    # Add a secondary (right) Y axis only when a series is assigned to it.
+    right_range = _range(extents["right"])
+    if right_range is not None:
+        fig.update_layout(yaxis2=dict(
+            overlaying="y", side="right", range=right_range,
+            title=dict(text="value (right)"),
+            showgrid=False, zeroline=False))
 
     fig.update_layout(xaxis_title=x_col, yaxis_title="value")
     configure_axis_zoom(fig)

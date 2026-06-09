@@ -38,8 +38,13 @@ def _swatch_option(c: str) -> dict:
         style={"display": "flex", "alignItems": "center"}), "value": c}
 
 
-def render_series_cards(series: List[dict], prefix: str):
-    """Return a list of card Divs for *series* with ``prefix``-namespaced ids."""
+def render_series_cards(series: List[dict], prefix: str,
+                        allow_axis: bool = False):
+    """Return a list of card Divs for *series* with ``prefix``-namespaced ids.
+
+    When *allow_axis* is set, each card gets a Left/Right Y-axis selector
+    (Multiple Trend uses this for its secondary axis).
+    """
     if not series:
         return html.Span("Select Y variables to configure their curves.",
                          style={"color": THEME["muted"], "fontSize": "12px"})
@@ -78,6 +83,13 @@ def render_series_cards(series: List[dict], prefix: str):
             dcc.Input(id={"type": f"{prefix}-displace", "index": sid},
                       type="number", value=s.get("displace", 0.0), step="any",
                       style=_NUM),
+            *([dcc.Dropdown(
+                id={"type": f"{prefix}-axis", "index": sid},
+                options=[{"label": "Y ◀", "value": "left"},
+                         {"label": "Y ▶", "value": "right"}],
+                value=s.get("axis", "left"), clearable=False, searchable=False,
+                style={"width": "78px", "color": "#111", "fontSize": "11px"},
+            )] if allow_axis else []),
             html.Button("+d/dx", id={"type": f"{prefix}-add-d", "index": sid},
                         n_clicks=0, title="Add derivative", style=_MINI),
             html.Button("+∫", id={"type": f"{prefix}-add-i", "index": sid},

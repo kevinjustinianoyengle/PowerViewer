@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pandas as pd
 from dash import ALL, Dash, Input, Output, State, ctx, dcc, html
 from dash.exceptions import PreventUpdate
 
@@ -41,10 +42,17 @@ def register(app: Dash) -> None:
         disp = disp or {}
         col = disp.get("col")
         values = None
+        times = None
         if filename and col:
             df = load_dataframe(filename, table)
             if col in df.columns:
                 values = df[col].to_numpy()
+                # Pair each sample with its timestamp (first datetime column),
+                # so the dispersion hover can show the time of each point.
+                tcols = [c for c in df.columns
+                         if pd.api.types.is_datetime64_any_dtype(df[c])]
+                if tcols:
+                    times = df[tcols[0]].to_numpy()
         # Single-choice radio -> 0-or-1 element list for the builder.
         dists = [] if not distribution or distribution == "none" else [distribution]
         return dispersion_1d.build_figure(
@@ -54,6 +62,7 @@ def register(app: Dash) -> None:
             marks=(marks or {}).get("dispersion"),
             fit_colors=disp.get("fit_colors") or {},
             labels=(labels or {}).get("dispersion"),
+            times=times,
         )
 
     # --- A colour dropdown per selected distribution ----------------------- #
