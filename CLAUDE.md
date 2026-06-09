@@ -188,6 +188,15 @@ Implemented once in `graphs/base.py`:
   table is selected by default.
 - Only **numeric** (and **datetime**, for the X axis) columns are listed as
   plottable variables. 1D Dispersion expects numeric data.
+- **CSV locale auto-detection** (`data/loader.py::_sniff_csv`): the delimiter is
+  sniffed from the header. A `;`-separated file is treated as the European
+  convention — **decimal comma** and **thousands dot** (e.g. `-8,77E-02`,
+  `1.234,5`) — so values parse as real numbers; `,`/tab files use the US
+  convention. UTF-8/Latin-1 encodings are both handled.
+- **Datetime detection** (`_coerce_datetimes`): text columns whose values look
+  like dates/times are parsed **day-first** (e.g. `06-06-2026 8:00:00`) and
+  converted to datetime dtype, so a time column like `PeriodStartTime` becomes
+  selectable on the trend X axis.
 
 ## Extending PowerViewer (add a new viewer)
 

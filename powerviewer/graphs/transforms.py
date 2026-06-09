@@ -28,7 +28,10 @@ def _to_numeric_x(x: pd.Series) -> np.ndarray:
     the sample index so a transform is still possible.
     """
     if pd.api.types.is_datetime64_any_dtype(x):
-        return x.view("int64").to_numpy() / 1e9  # ns -> s
+        # Normalise to nanoseconds since epoch, then to seconds (works across
+        # datetime64 units; Series.view was removed in pandas 3.0).
+        ns = x.to_numpy().astype("datetime64[ns]").astype("int64")
+        return ns / 1e9
     num = pd.to_numeric(x, errors="coerce")
     if num.isna().all():
         return np.arange(len(x), dtype=float)

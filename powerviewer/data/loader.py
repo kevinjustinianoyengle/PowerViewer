@@ -12,6 +12,7 @@ small file/column metadata travels to the browser; the bulky frame stays here.
 from __future__ import annotations
 
 import sqlite3
+import warnings
 from functools import lru_cache
 from pathlib import Path
 from typing import List
@@ -57,7 +58,7 @@ def _read(path_str: str, table: str | None) -> pd.DataFrame:
     suffix = path.suffix.lower()
 
     if suffix == ".csv":
-        df = pd.read_csv(path)
+        df = _read_csv(path)
     elif suffix in (".xlsx", ".xls"):
         df = pd.read_excel(path)
     elif _is_sqlite(path):
@@ -78,6 +79,82 @@ def _read(path_str: str, table: str | None) -> pd.DataFrame:
 
     # Normalise column names to strings and strip whitespace.
     df.columns = [str(c).strip() for c in df.columns]
+    # Recognise date/time columns (e.g. PeriodStartTime) so they can be used on
+    # the X axis of the trend viewers.
+    df = _coerce_datetimes(df)
+    return df
+
+
+# --------------------------------------------------------------------------- #
+# CSV format handling
+# --------------------------------------------------------------------------- #
+# Files exported in some locales (e.g. Spanish/European) use ';' as the column
+# separator and ',' as the decimal mark (with '.' as the thousands grouping) -
+# the mirror of the US convention. We sniff the delimiter from the header and
+# pick the matching decimal/thousands so values parse as real numbers.
+
+def _sniff_csv(path: Path) -> tuple[str, dict]:
+    """Return (encoding, pandas-read-kwargs) for *path* based on its header."""
+    header = ""
+    encoding = "utf-8-sig"
+    for enc in ("utf-8-sig", "latin-1"):
+        try:
+            with open(path, "r", encoding=enc) as fh:
+                header = fh.readline()
+            encoding = enc
+            break
+        except UnicodeDecodeError:
+            continue
+
+    counts = {sep: header.count(sep) for sep in (";", "\t", ",")}
+    sep = max(counts, key=counts.get)
+    if counts[sep] == 0:
+        sep = ","
+
+    if sep == ";":  # European convention: decimal comma, thousands dot.
+        return encoding, {"sep": ";", "decimal": ",", "thousands": "."}
+    if sep == "\t":
+        return encoding, {"sep": "\t", "decimal": "."}
+    return encoding, {"sep": ",", "decimal": "."}
+
+
+def _read_csv(path: Path) -> pd.DataFrame:
+    """Read a CSV, auto-detecting delimiter and decimal/thousands marks."""
+    encoding, kwargs = _sniff_csv(path)
+    return pd.read_csv(path, encoding=encoding, **kwargs)
+
+
+# --------------------------------------------------------------------------- #
+# Datetime detection
+# --------------------------------------------------------------------------- #
+_DATE_HINTS = ("-", "/", ":")
+
+
+def _coerce_datetimes(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert text columns that look like dates/times into datetime dtype.
+
+    A column is converted only when a clear majority of its values parse as
+    dates (day-first, matching e.g. ``06-06-2026 8:00:00``); this leaves plain
+    text and numeric columns untouched.
+    """
+    for col in df.columns:
+        # Only text-like columns are candidates (pandas >=3 uses a 'str' dtype,
+        # older versions use 'object' - skip anything already numeric/datetime).
+        if (pd.api.types.is_numeric_dtype(df[col])
+                or pd.api.types.is_datetime64_any_dtype(df[col])):
+            continue
+        sample = df[col].dropna().astype(str).head(25)
+        if sample.empty or not any(
+                any(h in v for h in _DATE_HINTS) for v in sample):
+            continue
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                parsed = pd.to_datetime(df[col], dayfirst=True, errors="coerce")
+        except Exception:  # noqa: BLE001
+            continue
+        if parsed.notna().mean() >= 0.8:
+            df[col] = parsed
     return df
 
 
