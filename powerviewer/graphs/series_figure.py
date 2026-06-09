@@ -51,23 +51,27 @@ def build(
     plotted = False
 
     for s in series:
-        src = s.get("source")
-        if not src or src not in df.columns:
+        # A series draws one column, or the row-wise SUM of several columns
+        # (``sources``) — e.g. the sum of two trend lines.
+        srcs = s.get("sources") or ([s["source"]] if s.get("source") else [])
+        srcs = [c for c in srcs if c in df.columns]
+        if not srcs:
             continue
-        data = df[[x_col, src]].copy()
-        data[src] = pd.to_numeric(data[src], errors="coerce")
-        data = data.dropna(subset=[src, x_col]).sort_values(x_col)
+        data = df[[x_col, *srcs]].copy()
+        for c in srcs:
+            data[c] = pd.to_numeric(data[c], errors="coerce")
+        data = data.dropna(subset=[*srcs, x_col]).sort_values(x_col)
         if data.empty:
             continue
+        combined = data[srcs].sum(axis=1).to_numpy()
 
         kind = s.get("transform", transforms.NONE)
-        y_t, total = transforms.apply_transform(
-            data[x_col], data[src].to_numpy(), kind)
+        y_t, total = transforms.apply_transform(data[x_col], combined, kind)
         scale = float(s.get("scale", 1.0) or 1.0)
         shift = float(s.get("displace", 0.0) or 0.0)
         y = y_t * scale + shift
 
-        name = s.get("name") or src
+        name = s.get("name") or " + ".join(srcs)
         if kind == transforms.INTEGRAL and total is not None:
             # The integral's total value is its curve endpoint; surface it.
             name = f"{name} [∫={total:.3g}]"

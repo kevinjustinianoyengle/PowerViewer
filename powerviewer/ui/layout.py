@@ -143,7 +143,9 @@ def _marks_controls() -> html.Div:
                 value="h", clearable=False,
                 style={"width": "130px", "color": "#111"},
             ),
-            dcc.Input(id="mark-x", type="number", placeholder="value / x",
+            # Text (not number) so a datetime can be typed for a vertical/point
+            # mark on a time axis, e.g. "2026-06-06 16:00". Plain numbers work too.
+            dcc.Input(id="mark-x", type="text", placeholder="value / x / date",
                       style=T.SMALL_INPUT),
             dcc.Input(id="mark-y", type="number", placeholder="y",
                       style={**T.SMALL_INPUT, "display": "none"}),
@@ -217,6 +219,19 @@ def _multi_options() -> html.Div:
                                            "fontSize": "12px"}),
                  style={"display": "flex", "flexDirection": "column",
                         "gap": "6px"}),
+        # Build a new series that is the sum of two existing lines.
+        html.Div([
+            html.Span("Sum two lines:", style=T.SECTION_LABEL),
+            dcc.Dropdown(id="multi-sum-a", placeholder="line A",
+                         style={"width": "180px", "color": "#111",
+                                "fontSize": "12px"}),
+            html.Span("+", style={"color": THEME["muted"]}),
+            dcc.Dropdown(id="multi-sum-b", placeholder="line B",
+                         style={"width": "180px", "color": "#111",
+                                "fontSize": "12px"}),
+            html.Button("+ Add sum", id="multi-sum-add", n_clicks=0,
+                        style=T.BUTTON_ACCENT),
+        ], style={**T.OPTIONS_ROW, "gap": "8px", "marginTop": "8px"}),
     ], style={**T.OPTIONS_ROW, "alignItems": "flex-start"})
 
 

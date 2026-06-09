@@ -50,8 +50,10 @@ def render_series_cards(series: List[dict], prefix: str):
         choices = (COLOR_CHOICES if current in COLOR_CHOICES
                    else [current] + COLOR_CHOICES)
         kind = s.get("transform", "none")
+        is_sum = len(s.get("sources") or []) > 1
+        badge = "Σ" if (is_sum and kind == "none") else _BADGE.get(kind, "raw")
         cards.append(html.Div([
-            html.Span(_BADGE.get(kind, "raw"),
+            html.Span(badge,
                       style={"fontSize": "10px", "fontWeight": "700",
                              "color": THEME["accent"],
                              "backgroundColor": THEME["accent_soft"],

@@ -120,15 +120,19 @@ def register(app: Dash) -> None:
 
         if active == "multi_trend":
             series = list(multi.get("series") or [])
-            sources = {s.get("source") for s in series}
+
+            def _uses(s):
+                return s.get("source") == col or col in (s.get("sources") or [])
+
+            selected = any(_uses(s) for s in series)
             if col == multi.get("x"):
                 multi["x"] = None
-            elif multi.get("x") is None and col not in sources:
+            elif multi.get("x") is None and not selected:
                 multi["x"] = col
-            elif col in sources:
-                # Deselecting a variable removes all of its curves.
-                series = [s for s in series if s.get("source") != col]
-                multi["series"] = series
+            elif selected:
+                # Deselecting a variable removes every curve that uses it
+                # (raw, its derivative/integral, and any sum it feeds).
+                multi["series"] = [s for s in series if not _uses(s)]
             else:
                 n_raw = len([s for s in series if s.get("transform") == "none"])
                 series.append({

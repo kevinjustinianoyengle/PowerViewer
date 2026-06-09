@@ -98,14 +98,23 @@ def register(app: Dash) -> None:
             raise PreventUpdate
         store = dict(store or {})
         series = list(store.get("series") or [])
-        src = (_find(series, trig["index"]) or {}).get("source")
-        if not src:
+        base = _find(series, trig["index"]) or {}
+        srcs = base.get("sources") or ([base["source"]] if base.get("source")
+                                       else [])
+        if not srcs:
             raise PreventUpdate
         label = "d/dx" if kind == "derivative" else "∫"
-        series.append({"id": uuid.uuid4().hex[:8], "source": src,
-                       "transform": kind, "name": f"{label}({src})",
-                       "color": palette_color(len(series)), "scale": 1.0,
-                       "displace": 0.0})
+        inner = " + ".join(srcs)
+        new = {"id": uuid.uuid4().hex[:8], "transform": kind,
+               "name": f"{label}({inner})", "color": palette_color(len(series)),
+               "scale": 1.0, "displace": 0.0}
+        # Keep single-source curves on "source" (so the var panel highlights),
+        # multi-source (sum) curves on "sources".
+        if len(srcs) == 1:
+            new["source"] = srcs[0]
+        else:
+            new["sources"] = srcs
+        series.append(new)
         store["series"] = series
         return store
 
@@ -141,4 +150,44 @@ def register(app: Dash) -> None:
         store = dict(store or {})
         store["series"] = [s for s in (store.get("series") or [])
                            if s["id"] != trig["index"]]
+        return store
+
+    # --- Sum of two lines -------------------------------------------------- #
+    def _source_columns(store):
+        """Distinct underlying columns of the current single-source series."""
+        seen = []
+        for s in (store or {}).get("series") or []:
+            src = s.get("source")
+            if src and src not in seen:
+                seen.append(src)
+        return seen
+
+    @app.callback(
+        Output("multi-sum-a", "options"),
+        Output("multi-sum-b", "options"),
+        Input("multi-store", "data"),
+    )
+    def sum_options(store):
+        opts = [{"label": c, "value": c} for c in _source_columns(store)]
+        return opts, opts
+
+    @app.callback(
+        Output("multi-store", "data", allow_duplicate=True),
+        Input("multi-sum-add", "n_clicks"),
+        State("multi-sum-a", "value"),
+        State("multi-sum-b", "value"),
+        State("multi-store", "data"),
+        prevent_initial_call=True,
+    )
+    def add_sum(_n, col_a, col_b, store):
+        if not col_a or not col_b:
+            raise PreventUpdate
+        store = dict(store or {})
+        series = list(store.get("series") or [])
+        sources = [col_a, col_b]
+        series.append({"id": uuid.uuid4().hex[:8], "sources": sources,
+                       "transform": "none", "name": " + ".join(sources),
+                       "color": palette_color(len(series)), "scale": 1.0,
+                       "displace": 0.0})
+        store["series"] = series
         return store

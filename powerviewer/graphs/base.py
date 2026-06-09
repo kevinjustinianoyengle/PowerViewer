@@ -87,9 +87,16 @@ def apply_labels(fig: go.Figure, labels: Optional[Dict]) -> go.Figure:
 #   {"kind": "point", "x": <x>, "y": <y>, "label": "..."}
 
 def apply_marks(fig: go.Figure, marks: Optional[List[Dict]]) -> go.Figure:
-    """Draw the user-defined marks onto *fig*."""
+    """Draw the user-defined marks onto *fig*.
+
+    A mark's position may be numeric *or* a datetime string (for vertical/point
+    marks on a time axis); ``_fmt`` formats either kind for the label.
+    """
     if not marks:
         return fig
+
+    def _fmt(v):
+        return f"{v:g}" if isinstance(v, (int, float)) else str(v)
 
     for mark in marks:
         kind = mark.get("kind")
@@ -98,7 +105,7 @@ def apply_marks(fig: go.Figure, marks: Optional[List[Dict]]) -> go.Figure:
             fig.add_hline(
                 y=mark["value"],
                 line=dict(color=THEME["accent"], width=1.5, dash="dash"),
-                annotation_text=label or f"y = {mark['value']:g}",
+                annotation_text=label or f"y = {_fmt(mark['value'])}",
                 annotation_position="right",
                 annotation_font_color=THEME["accent"],
             )
@@ -106,7 +113,7 @@ def apply_marks(fig: go.Figure, marks: Optional[List[Dict]]) -> go.Figure:
             fig.add_vline(
                 x=mark["value"],
                 line=dict(color=THEME["x_select"], width=1.5, dash="dash"),
-                annotation_text=label or f"x = {mark['value']:g}",
+                annotation_text=label or f"x = {_fmt(mark['value'])}",
                 annotation_position="top",
                 annotation_font_color=THEME["x_select"],
             )
@@ -116,7 +123,7 @@ def apply_marks(fig: go.Figure, marks: Optional[List[Dict]]) -> go.Figure:
                 mode="markers+text",
                 marker=dict(color=THEME["accent"], size=12, symbol="x-thin",
                             line=dict(width=2, color=THEME["accent"])),
-                text=[label or f"({mark['x']:g}, {mark['y']:g})"],
+                text=[label or f"({_fmt(mark['x'])}, {_fmt(mark['y'])})"],
                 textposition="top center",
                 textfont=dict(color=THEME["accent"]),
                 hoverinfo="text",

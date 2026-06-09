@@ -18,6 +18,41 @@ _GRAPH_OF = {
     "multi_trend": ("multi-graph", "multi_trend"),
 }
 
+# Axes whose zoom we mirror into the figure before exporting.
+_AXES = ("xaxis", "yaxis")
+
+
+def _has_zoom(relayout) -> bool:
+    """True if relayoutData carries an explicit (non-auto) axis range."""
+    if not relayout:
+        return False
+    return any(f"{ax}.range[0]" in relayout or f"{ax}.range" in relayout
+               for ax in _AXES)
+
+
+def _apply_view(fig: go.Figure, relayout) -> go.Figure:
+    """Mirror the user's current zoom/pan (from relayoutData) onto *fig*.
+
+    Plotly keeps interactive zoom in the graph's ``relayoutData`` (e.g.
+    ``{"xaxis.range[0]": .., "xaxis.range[1]": ..}``), not in the ``figure``
+    prop. We copy those ranges into the figure so the saved PNG matches what the
+    user sees instead of the full auto-ranged plot. Works for numeric and
+    datetime axes (relayout values are passed through as-is).
+    """
+    if not relayout:
+        return fig
+    for ax in _AXES:
+        if relayout.get(f"{ax}.autorange"):
+            fig.layout[ax].update(autorange=True, range=None)
+            continue
+        r0, r1 = relayout.get(f"{ax}.range[0]"), relayout.get(f"{ax}.range[1]")
+        rng = relayout.get(f"{ax}.range")
+        if r0 is not None and r1 is not None:
+            fig.layout[ax].update(range=[r0, r1], autorange=False)
+        elif isinstance(rng, (list, tuple)) and len(rng) == 2:
+            fig.layout[ax].update(range=list(rng), autorange=False)
+    return fig
+
 
 def register(app: Dash) -> None:
 
@@ -59,14 +94,22 @@ def register(app: Dash) -> None:
         State("dispersion-graph", "figure"),
         State("trend-graph", "figure"),
         State("multi-graph", "figure"),
+        # User zoom/pan lives in relayoutData, NOT in the figure prop, so we must
+        # read it to capture the current (zoomed) view rather than the full plot.
+        State("dispersion-graph", "relayoutData"),
+        State("trend-graph", "relayoutData"),
+        State("multi-graph", "relayoutData"),
         prevent_initial_call=True,
     )
-    def screenshot(_n, active, disp_fig, trend_fig, multi_fig):
-        figs = {"dispersion": disp_fig, "trend": trend_fig,
-                "multi_trend": multi_fig}
-        fig_dict = figs.get(active)
+    def screenshot(_n, active, disp_fig, trend_fig, multi_fig,
+                   disp_rl, trend_rl, multi_rl):
+        figs = {"dispersion": (disp_fig, disp_rl), "trend": (trend_fig, trend_rl),
+                "multi_trend": (multi_fig, multi_rl)}
+        fig_dict, relayout = figs.get(active, (None, None))
         if not fig_dict:
             return "Nothing to capture yet."
         _, prefix = _GRAPH_OF[active]
-        path = save_screenshot(go.Figure(fig_dict), prefix)
-        return f"📷 Saved screenshot → {path.name}"
+        fig = _apply_view(go.Figure(fig_dict), relayout)
+        path = save_screenshot(fig, prefix)
+        zoomed = " (zoomed view)" if _has_zoom(relayout) else ""
+        return f"📷 Saved screenshot{zoomed} → {path.name}"

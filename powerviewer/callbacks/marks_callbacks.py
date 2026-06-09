@@ -6,6 +6,7 @@ Marks are stored per viewer (``{"dispersion": [...], "trend": [...],
 
 from __future__ import annotations
 
+import pandas as pd
 from dash import ALL, Dash, Input, Output, State, ctx, html, no_update
 from dash.exceptions import PreventUpdate
 
@@ -16,18 +17,37 @@ _VIEW_TO_KEY = {"dispersion": "dispersion", "trend": "trend",
                 "multi_trend": "multi_trend"}
 
 
+def _fmt(v) -> str:
+    return f"{v:g}" if isinstance(v, (int, float)) else str(v)
+
+
+def _parse_pos(raw, allow_datetime: bool = True):
+    """Parse a mark position: a number, or (for time axes) a datetime string.
+
+    Returns a float, an ISO datetime string, or ``None`` if it can't be parsed.
+    """
+    if raw is None or str(raw).strip() == "":
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        pass
+    if allow_datetime:
+        ts = pd.to_datetime(raw, dayfirst=True, errors="coerce")
+        if pd.notna(ts):
+            return ts.isoformat()
+    return None
+
+
 def _describe(mark) -> str:
     """Readable pill text, e.g. ``H: nominal = 100`` or ``P: peak = (3, 5)``."""
     kind = mark.get("kind")
     label = mark.get("label")
     if kind == "h":
-        name = label or "y"
-        return f"H: {name} = {mark['value']:g}"
+        return f"H: {label or 'y'} = {_fmt(mark['value'])}"
     if kind == "v":
-        name = label or "x"
-        return f"V: {name} = {mark['value']:g}"
-    name = label or "point"
-    return f"P: {name} = ({mark['x']:g}, {mark['y']:g})"
+        return f"V: {label or 'x'} = {_fmt(mark['value'])}"
+    return f"P: {label or 'point'} = ({_fmt(mark['x'])}, {_fmt(mark['y'])})"
 
 
 def register(app: Dash) -> None:
@@ -60,15 +80,24 @@ def register(app: Dash) -> None:
         key = _VIEW_TO_KEY.get(active)
         if key is None:
             raise PreventUpdate
-        if kind in ("h", "v"):
-            if x_val is None:
+        if kind == "h":
+            # Horizontal line sits at a Y value (numeric).
+            value = _parse_pos(x_val, allow_datetime=False)
+            if value is None:
                 raise PreventUpdate
-            mark = {"kind": kind, "value": float(x_val), "label": label or ""}
+            mark = {"kind": "h", "value": value, "label": label or ""}
+        elif kind == "v":
+            # Vertical line sits at an X value: number or datetime (time axis).
+            value = _parse_pos(x_val, allow_datetime=True)
+            if value is None:
+                raise PreventUpdate
+            mark = {"kind": "v", "value": value, "label": label or ""}
         elif kind == "point":
-            if x_val is None or y_val is None:
+            x_pos = _parse_pos(x_val, allow_datetime=True)
+            y_pos = _parse_pos(y_val, allow_datetime=False)
+            if x_pos is None or y_pos is None:
                 raise PreventUpdate
-            mark = {"kind": "point", "x": float(x_val), "y": float(y_val),
-                    "label": label or ""}
+            mark = {"kind": "point", "x": x_pos, "y": y_pos, "label": label or ""}
         else:
             raise PreventUpdate
         return {**marks, key: list(marks.get(key, [])) + [mark]}

@@ -158,6 +158,12 @@ legend entry. Clearing a scale/displacement box keeps the previous value
 ### 3. Multiple Trend (`graphs/multi_trend.py`)
 - **One X**, **any number of Y** source variables, each adding a raw series; add
   derivative/integral series on top of any of them.
+- **Sum of two lines**: the *Sum two lines* control (two dropdowns + **Add sum**)
+  creates a new series whose value is the row-wise **sum of two source columns**.
+  Such a series carries `sources=[a, b]` (instead of a single `source`); the
+  shared builder sums those columns, then applies transform → scale → displace,
+  so you can also take the derivative/integral of a sum. Sum cards show a **Σ**
+  badge. (Sum is Multiple-Trend only.)
 - Default colours come from `config.ORANGE_PALETTE` (recolourable per card).
 - The **Y axis auto-fits dynamically** to the highest/lowest *displayed* values.
 - Adding/removing a series **restarts the view** (figure `uirevision` keyed to
@@ -172,6 +178,10 @@ Implemented once in `graphs/base.py`:
   - **"📷 Screenshot"** button top-right in the header → captures the **active**
     viewer and writes a PNG into `2. Screenshots/` via Kaleido (server-side,
     committed with the repo). Files are named `<viewer>_<YYYYMMDD_HHMMSS>.png`.
+    The saved image reflects the **current zoom/pan**: Plotly keeps interactive
+    zoom in the graph's `relayoutData` (not the `figure` prop), so
+    `shell_callbacks._apply_view` copies those ranges onto the figure before
+    export (works for numeric and datetime axes).
 - **Marks** — the horizontal controls at the bottom read **type → value →
   (y for point) → label → [+]**. Added marks appear as well-spaced **pills**
   (e.g. `H: nominal = 100`, `P: peak = (3, 5)`), each with a **✕ delete**, plus
