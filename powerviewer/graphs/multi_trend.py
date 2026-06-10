@@ -24,6 +24,7 @@ def build_figure(
     series: Optional[List[dict]],
     marks: Optional[list] = None,
     labels: Optional[dict] = None,
+    axis_cfg: Optional[dict] = None,
 ) -> go.Figure:
     """Build the multi-line trend figure from *series*."""
     from .base import empty_figure
@@ -36,5 +37,5 @@ def build_figure(
         df, x_col, series,
         title=f"Multiple Trend vs {x_col}",
         empty_msg=f"No numeric data to plot against '{x_col}'.",
-        marks=marks, labels=labels,
+        marks=marks, labels=labels, axis_cfg=axis_cfg,
     )

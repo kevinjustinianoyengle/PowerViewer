@@ -15,6 +15,31 @@ from ..graphs.dispersion_1d import DEFAULT_FIT_COLORS, DISTRIBUTIONS
 _CHOICES = ["#58A6FF", "#3FB950", "#BC8CFF", "#FF7A00", "#FF3B30", "#FFD60A",
             "#E6EDF3", "#FF9A3D"]
 
+# Pill style for a single fitted-moment value below the graph.
+_STAT_CHIP = {
+    "display": "inline-flex", "gap": "4px", "padding": "4px 10px",
+    "borderRadius": "14px", "border": f"1px solid {THEME['border']}",
+    "backgroundColor": THEME["panel_alt"], "fontSize": "12.5px",
+    "color": THEME["text"],
+}
+
+
+def _zoom_xrange(relayout):
+    """Extract the current X zoom window from a graph's relayoutData.
+
+    Returns ``(lo, hi)`` for an explicit zoom, or ``None`` for full range /
+    autorange reset (so the dispersion is computed over all the data).
+    """
+    if not relayout or relayout.get("xaxis.autorange"):
+        return None
+    r0, r1 = relayout.get("xaxis.range[0]"), relayout.get("xaxis.range[1]")
+    if r0 is not None and r1 is not None:
+        return (r0, r1)
+    rng = relayout.get("xaxis.range")
+    if isinstance(rng, (list, tuple)) and len(rng) == 2:
+        return (rng[0], rng[1])
+    return None
+
 
 def _swatch(c):
     return {"label": html.Div([
@@ -30,15 +55,18 @@ def register(app: Dash) -> None:
 
     @app.callback(
         Output("dispersion-graph", "figure"),
+        Output("disp-stats", "children"),
         Input("disp-store", "data"),
         Input("disp-distributions", "value"),
         Input("disp-bins", "value"),
         Input("marks-store", "data"),
         Input("labels-store", "data"),
+        # Zoom on the X axis re-bins/re-fits the dispersion to the visible window.
+        Input("dispersion-graph", "relayoutData"),
         State("current-file", "data"),
         State("current-table", "data"),
     )
-    def render(disp, distribution, bins, marks, labels, filename, table):
+    def render(disp, distribution, bins, marks, labels, relayout, filename, table):
         disp = disp or {}
         col = disp.get("col")
         values = None
@@ -54,16 +82,36 @@ def register(app: Dash) -> None:
                 if tcols:
                     times = df[tcols[0]].to_numpy()
         # Single-choice radio -> 0-or-1 element list for the builder.
-        dists = [] if not distribution or distribution == "none" else [distribution]
-        return dispersion_1d.build_figure(
+        dist = None if not distribution or distribution == "none" else distribution
+        value_range = _zoom_xrange(relayout)
+        fig = dispersion_1d.build_figure(
             values, col,
-            distributions=dists,
+            distributions=[dist] if dist else [],
             bins=int(bins or 40),
             marks=(marks or {}).get("dispersion"),
             fit_colors=disp.get("fit_colors") or {},
             labels=(labels or {}).get("dispersion"),
             times=times,
+            value_range=value_range,
         )
+
+        # Fitted-distribution moments, shown outside the plot.
+        moments = (dispersion_1d.fit_moments(dist, values, value_range)
+                   if (dist and values is not None) else [])
+        if not moments:
+            stats = html.Span("select a distribution to see its moments",
+                              style={"color": THEME["muted"], "fontSize": "12px"})
+        else:
+            label = dispersion_1d.DISTRIBUTIONS[dist][0]
+            stats = ([html.Span(label, style={"fontSize": "12px",
+                                              "fontWeight": "700",
+                                              "color": THEME["accent"]})]
+                     + [html.Span([html.Span(f"{k}: ",
+                                             style={"color": THEME["muted"]}),
+                                   html.Span(v, style={"fontWeight": "600"})],
+                                  style=_STAT_CHIP)
+                        for k, v in moments])
+        return fig, stats
 
     # --- A colour dropdown per selected distribution ----------------------- #
     @app.callback(

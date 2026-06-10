@@ -27,17 +27,27 @@ def _series_cols(active, disp, trend, multi):
 
 def register(app: Dash) -> None:
 
+    # The right-axis title only applies to Multiple Trend (two Y axes).
+    @app.callback(
+        Output("label-yaxis2-wrap", "style"),
+        Input("active-view", "data"),
+    )
+    def toggle_yaxis2(active):
+        return {"display": "block" if active == "multi_trend" else "none"}
+
     # --- Populate the label inputs when the active viewer changes ----------- #
     @app.callback(
         Output("label-title", "value"),
         Output("label-xaxis", "value"),
         Output("label-yaxis", "value"),
+        Output("label-yaxis2", "value"),
         Input("active-view", "data"),
         State("labels-store", "data"),
     )
     def populate(active, labels):
         lab = (labels or {}).get(active, {})
-        return lab.get("title", ""), lab.get("xaxis", ""), lab.get("yaxis", "")
+        return (lab.get("title", ""), lab.get("xaxis", ""),
+                lab.get("yaxis", ""), lab.get("yaxis2", ""))
 
     # --- Save title / axis edits back into the store ----------------------- #
     @app.callback(
@@ -45,16 +55,18 @@ def register(app: Dash) -> None:
         Input("label-title", "value"),
         Input("label-xaxis", "value"),
         Input("label-yaxis", "value"),
+        Input("label-yaxis2", "value"),
         State("active-view", "data"),
         State("labels-store", "data"),
         prevent_initial_call=True,
     )
-    def save_labels(title, xaxis, yaxis, active, labels):
+    def save_labels(title, xaxis, yaxis, yaxis2, active, labels):
         labels = dict(labels or {})
         entry = dict(labels.get(active, {"series": {}}))
         entry["title"] = title or ""
         entry["xaxis"] = xaxis or ""
         entry["yaxis"] = yaxis or ""
+        entry["yaxis2"] = yaxis2 or ""
         entry.setdefault("series", {})
         labels[active] = entry
         return labels

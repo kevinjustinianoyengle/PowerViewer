@@ -130,6 +130,17 @@ variables panel on the right is intentionally narrow (15% slimmer than default).
   curve** (each point at a random height in `[0, pdf(x)]`), so the point-cloud
   silhouette mirrors the chosen distribution — a quick visual goodness-of-fit.
   With no distribution selected, samples sit as a jittered strip below zero.
+- **Zoom recomputes the dispersion**: zooming the X axis re-bins the histogram so
+  the same bar count spreads across the visible window, and re-fits the
+  distribution to just those samples. The render callback reads the graph's
+  `relayoutData` and passes `value_range` to `build_figure`, which filters,
+  re-bins (explicit `xbins`) and re-fits on the subset, then pins the X range.
+  Double-click to reset to the full range.
+- **Fitted moments** (`dispersion_1d.fit_moments`): the selected distribution's
+  key parameters (normal → mean & std, uniform → min/max/spread, log-normal →
+  median/mean/std/σ(log), exponential → mean/rate/std, plus the sample count) are
+  shown as **pills in the options panel — outside the plot, not in the legend**
+  (`disp-stats`). They honour the current zoom window too.
 - Selection is **exclusive**: choosing one variable blocks the others until it
   is deselected (enforced in `callbacks/variables.py`).
 
@@ -175,6 +186,12 @@ respected. Switch `_NS_PER_UNIT` to `1e9` for seconds.
   scales are both readable. Each axis auto-fits independently. Series moved to the
   right axis are recoloured from a distinct blue/teal palette
   (`config.SECONDARY_PALETTE`) so it's obvious which scale a trend belongs to.
+  The **Axes** row in the options panel controls them: a **Shared 0** checkbox
+  aligns both axes' zero lines at the same vertical position
+  (`series_figure._aligned_ranges`), and **Left/Right min/max** boxes set each
+  axis range manually (blank = auto-fit). The **left** axis title is the Labels
+  row's *Y-axis title*; the **right** axis title is the *Y-right title* box
+  (shown only here), stored in `labels-store[...]["yaxis2"]`.
 - Default colours come from `config.ORANGE_PALETTE` (recolourable per card).
 - The **Y axis auto-fits dynamically** to the highest/lowest *displayed* values.
 - Adding/removing a series **restarts the view** (figure `uirevision` keyed to

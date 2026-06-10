@@ -61,7 +61,7 @@ def register(app: Dash) -> None:
         empty_marks = {"dispersion": [], "trend": [], "multi_trend": []}
         reset_disp = {"col": None, "fit_colors": {}}
         reset_trend = {"x": None, "y": None, "series": []}
-        reset_multi = {"x": None, "series": []}
+        reset_multi = {"x": None, "series": [], "axis_cfg": {"share_zero": True}}
 
         if not filename:
             return (None, None, [],

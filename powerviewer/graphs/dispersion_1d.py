@@ -52,6 +52,58 @@ def _fit_params(name: str, values: np.ndarray):
         return None
 
 
+def _finite_subset(values, value_range=None) -> np.ndarray:
+    """Finite values, optionally restricted to a ``(lo, hi)`` window."""
+    v = np.asarray(values, dtype=float)
+    v = v[np.isfinite(v)]
+    if value_range is not None and None not in value_range:
+        lo, hi = sorted(value_range)
+        v = v[(v >= lo) & (v <= hi)]
+    return v
+
+
+def fit_moments(name: str, values, value_range=None):
+    """Return the fitted distribution's key moments as ``[(label, text), ...]``.
+
+    These are the meaningful parameters per distribution (e.g. mean & std for
+    normal, the spread for uniform). Filtering matches :func:`build_figure`
+    (finite + optional zoom window) so the numbers describe what is on screen.
+    Returns ``[]`` when nothing can be fitted.
+    """
+    if name not in DISTRIBUTIONS:
+        return []
+    v = _finite_subset(values, value_range)
+    if v.size == 0:
+        return []
+    params = _fit_params(name, v)
+    if params is None:
+        return []
+
+    def f(x):
+        return f"{x:.4g}"
+
+    out = [("n", str(v.size))]
+    if name == "normal":
+        loc, scale = params
+        out += [("Mean μ", f(loc)), ("Std σ", f(scale))]
+    elif name == "uniform":
+        loc, scale = params
+        out += [("Min a", f(loc)), ("Max b", f(loc + scale)),
+                ("Spread b−a", f(scale))]
+    elif name == "lognormal":
+        shape, loc, scale = params  # shape = σ of log; scale = exp(μ)
+        mean = loc + scale * np.exp(shape ** 2 / 2)
+        var = (scale ** 2) * (np.exp(shape ** 2) - 1) * np.exp(shape ** 2)
+        out += [("Median", f(loc + scale)), ("Mean", f(mean)),
+                ("Std", f(np.sqrt(var))), ("σ(log)", f(shape))]
+    elif name == "exponential":
+        loc, scale = params
+        out += [("Mean", f(loc + scale)),
+                ("Rate λ", f(1.0 / scale) if scale else "—"),
+                ("Std", f(scale))]
+    return out
+
+
 def build_figure(
     values: Optional[np.ndarray],
     column: Optional[str],
@@ -61,11 +113,17 @@ def build_figure(
     fit_colors: Optional[Dict[str, str]] = None,
     labels: Optional[dict] = None,
     times: Optional[np.ndarray] = None,
+    value_range: Optional[tuple] = None,
 ) -> go.Figure:
     """Build the 1D dispersion figure.
 
     *times* (optional) is the per-row timestamp aligned with *values*; when
     present, hovering a sample shows the **time** of that sample.
+
+    *value_range* ``(lo, hi)`` (optional) restricts the analysis to that X window
+    — the histogram is re-binned into ``bins`` bars across it and the
+    distribution is re-fitted to just those samples, so zooming "recomputes" the
+    dispersion for the visible section.
     """
     if values is None or column is None:
         return empty_figure("Select ONE variable on the right to view its "
@@ -79,6 +137,20 @@ def build_figure(
     if values.size == 0:
         return empty_figure(f"'{column}' has no numeric values to plot.")
 
+    # Restrict to the zoomed window: re-bin and re-fit on this subset only.
+    if value_range is not None:
+        lo, hi = value_range
+        if lo is not None and hi is not None:
+            if hi < lo:
+                lo, hi = hi, lo
+            sub = (values >= lo) & (values <= hi)
+            values = values[sub]
+            if times is not None:
+                times = times[sub]
+            if values.size == 0:
+                return empty_figure(f"No '{column}' samples in the zoomed "
+                                    f"range [{lo:g}, {hi:g}].")
+
     # Hover for the sample points: show the timestamp when we have one.
     if times is not None:
         sample_hover = ("time=%{customdata|%Y-%m-%d %H:%M:%S}"
@@ -91,10 +163,21 @@ def build_figure(
 
     fig = base_figure(f"1D Dispersion - {column}")
 
+    # Binning window: the zoomed range if given, else the data span. Using
+    # explicit xbins spreads exactly ``bins`` bars across the window, so a zoom
+    # rearranges the same number of bars over the visible section.
+    win_lo, win_hi = float(values.min()), float(values.max())
+    if value_range is not None and None not in value_range:
+        win_lo, win_hi = sorted(value_range)
+    span = win_hi - win_lo
+    xbins = (dict(start=win_lo, end=win_hi, size=span / int(bins))
+             if span > 0 else None)
+
     # Density histogram: the vertical axis = how often values appear.
     fig.add_trace(go.Histogram(
         x=values,
-        nbinsx=int(bins),
+        xbins=xbins,
+        nbinsx=None if xbins else int(bins),
         histnorm="probability density",
         marker=dict(color=THEME["accent"], opacity=0.45,
                     line=dict(color=THEME["border"], width=1)),
@@ -156,6 +239,11 @@ def build_figure(
 
     fig.update_layout(bargap=0.02, xaxis_title=column,
                       yaxis_title="probability density")
+    # Keep the view pinned to the zoomed window (Y auto-fits to the re-binned
+    # density). Without this the freshly-built figure would reset to full range.
+    if value_range is not None and None not in value_range:
+        fig.update_xaxes(range=[win_lo, win_hi], autorange=False)
+
     apply_labels(fig, labels)
     apply_marks(fig, marks)
     return fig

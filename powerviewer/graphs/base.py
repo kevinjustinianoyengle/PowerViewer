@@ -66,15 +66,20 @@ def series_name(labels: Optional[Dict], key: str, default: str) -> str:
 
 
 def apply_labels(fig: go.Figure, labels: Optional[Dict]) -> go.Figure:
-    """Apply title / axis-title overrides onto *fig* (legend handled per-trace)."""
+    """Apply title / axis-title overrides onto *fig* (legend handled per-trace).
+
+    Targets the **primary** x/y axes only (via ``layout.xaxis``/``layout.yaxis``)
+    so a secondary ``yaxis2`` title is not overwritten — ``update_yaxes`` would
+    hit every y-axis.
+    """
     if not labels:
         return fig
     if labels.get("title"):
         fig.update_layout(title_text=labels["title"])
     if labels.get("xaxis"):
-        fig.update_xaxes(title_text=labels["xaxis"])
+        fig.layout.xaxis.title.text = labels["xaxis"]
     if labels.get("yaxis"):
-        fig.update_yaxes(title_text=labels["yaxis"])
+        fig.layout.yaxis.title.text = labels["yaxis"]
     return fig
 
 

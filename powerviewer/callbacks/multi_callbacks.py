@@ -45,7 +45,8 @@ def register(app: Dash) -> None:
         fig = multi_trend.build_figure(
             df, store.get("x"), series,
             marks=(marks or {}).get("multi_trend"),
-            labels=(labels or {}).get("multi_trend"))
+            labels=(labels or {}).get("multi_trend"),
+            axis_cfg=store.get("axis_cfg") or {})
         fig.update_layout(uirevision="|".join(s["id"] for s in series) or "empty")
         return fig
 
@@ -180,6 +181,24 @@ def register(app: Dash) -> None:
     def sum_options(store):
         opts = [{"label": c, "value": c} for c in _source_columns(store)]
         return opts, opts
+
+    # --- Vertical-axis config: shared zero + manual min/max ---------------- #
+    @app.callback(
+        Output("multi-store", "data", allow_duplicate=True),
+        Input("multi-share-zero", "value"),
+        Input("multi-lmin", "value"),
+        Input("multi-lmax", "value"),
+        Input("multi-rmin", "value"),
+        Input("multi-rmax", "value"),
+        State("multi-store", "data"),
+        prevent_initial_call=True,
+    )
+    def axis_config(share, lmin, lmax, rmin, rmax, store):
+        store = dict(store or {})
+        store["axis_cfg"] = {"share_zero": bool(share),
+                             "lmin": lmin, "lmax": lmax,
+                             "rmin": rmin, "rmax": rmax}
+        return store
 
     @app.callback(
         Output("multi-store", "data", allow_duplicate=True),

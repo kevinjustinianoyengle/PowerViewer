@@ -190,6 +190,13 @@ def _dispersion_options() -> html.Div:
                                     style={"color": THEME["muted"],
                                            "fontSize": "12px"}),
                  style={"display": "flex", "gap": "8px", "flexWrap": "wrap"}),
+        # Fitted-distribution moments (shown outside the plot, not in the legend).
+        html.Div([
+            html.Span("Moments", style=T.SECTION_LABEL),
+            html.Div(id="disp-stats",
+                     style={"display": "flex", "gap": "8px", "flexWrap": "wrap"}),
+        ], style={**T.OPTIONS_ROW, "gap": "8px", "width": "100%",
+                  "marginTop": "8px"}),
     ], style={**T.OPTIONS_ROW, "gap": "10px"})
 
 
@@ -232,6 +239,24 @@ def _multi_options() -> html.Div:
             html.Button("+ Add sum", id="multi-sum-add", n_clicks=0,
                         style=T.BUTTON_ACCENT),
         ], style={**T.OPTIONS_ROW, "gap": "8px", "marginTop": "8px"}),
+        # Vertical-axis scale: shared zero + manual min/max for each axis.
+        html.Div([
+            html.Span("Axes", style=T.SECTION_LABEL),
+            dcc.Checklist(
+                id="multi-share-zero",
+                options=[{"label": " Shared 0", "value": "on"}],
+                value=["on"], style={"display": "inline-flex"}),
+            html.Span("Left", style=T.SECTION_LABEL),
+            dcc.Input(id="multi-lmin", type="number", placeholder="min",
+                      style={**T.SMALL_INPUT, "width": "80px"}),
+            dcc.Input(id="multi-lmax", type="number", placeholder="max",
+                      style={**T.SMALL_INPUT, "width": "80px"}),
+            html.Span("Right", style=T.SECTION_LABEL),
+            dcc.Input(id="multi-rmin", type="number", placeholder="min",
+                      style={**T.SMALL_INPUT, "width": "80px"}),
+            dcc.Input(id="multi-rmax", type="number", placeholder="max",
+                      style={**T.SMALL_INPUT, "width": "80px"}),
+        ], style={**T.OPTIONS_ROW, "gap": "8px", "marginTop": "8px"}),
     ], style={**T.OPTIONS_ROW, "alignItems": "flex-start"})
 
 
@@ -245,6 +270,11 @@ def _label_options() -> html.Div:
                   placeholder="X-axis title", style=T.SMALL_INPUT),
         dcc.Input(id="label-yaxis", type="text", debounce=True,
                   placeholder="Y-axis title", style=T.SMALL_INPUT),
+        # Right (secondary) axis title — only meaningful in Multiple Trend.
+        html.Div(
+            dcc.Input(id="label-yaxis2", type="text", debounce=True,
+                      placeholder="Y-right title", style=T.SMALL_INPUT),
+            id="label-yaxis2-wrap", style={"display": "none"}),
         html.Span("Legend:", style=T.SECTION_LABEL),
         html.Div(id="legend-editor",
                  children=html.Span("select variables",
@@ -279,7 +309,9 @@ def _stores() -> list:
         # Series-list model: each curve has source/transform/name/color/scale/
         # displace, so raw + derivative + integral can coexist as separate cards.
         dcc.Store(id="trend-store", data={"x": None, "y": None, "series": []}),
-        dcc.Store(id="multi-store", data={"x": None, "series": []}),
+        dcc.Store(id="multi-store",
+                  data={"x": None, "series": [],
+                        "axis_cfg": {"share_zero": True}}),
         dcc.Store(id="marks-store",
                   data={"dispersion": [], "trend": [], "multi_trend": []}),
         # Per-viewer label overrides for title / axes / legend.
