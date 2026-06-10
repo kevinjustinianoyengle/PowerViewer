@@ -114,6 +114,7 @@ def build_figure(
     labels: Optional[dict] = None,
     times: Optional[np.ndarray] = None,
     value_range: Optional[tuple] = None,
+    color: Optional[str] = None,
 ) -> go.Figure:
     """Build the 1D dispersion figure.
 
@@ -160,6 +161,7 @@ def build_figure(
 
     distributions = distributions or []
     fit_colors = fit_colors or {}
+    hist_color = color or THEME["accent"]
 
     fig = base_figure(f"1D Dispersion - {column}")
 
@@ -179,7 +181,7 @@ def build_figure(
         xbins=xbins,
         nbinsx=None if xbins else int(bins),
         histnorm="probability density",
-        marker=dict(color=THEME["accent"], opacity=0.45,
+        marker=dict(color=hist_color, opacity=0.45,
                     line=dict(color=THEME["border"], width=1)),
         name=series_name(labels, column, column),
         hovertemplate="value=%{x}<br>density=%{y:.4f}<extra></extra>",

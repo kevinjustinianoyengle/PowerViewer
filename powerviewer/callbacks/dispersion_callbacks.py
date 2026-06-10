@@ -10,6 +10,9 @@ from ..config import THEME
 from ..data import load_dataframe
 from ..graphs import dispersion_1d
 from ..graphs.dispersion_1d import DEFAULT_FIT_COLORS, DISTRIBUTIONS
+from ..graphs.base import series_name
+from ..ui import theme as T
+from ..ui.cards import color_options, field
 
 # Colour choices reused for the per-fit swatch dropdowns.
 _CHOICES = ["#58A6FF", "#3FB950", "#BC8CFF", "#FF7A00", "#FF3B30", "#FFD60A",
@@ -93,6 +96,7 @@ def register(app: Dash) -> None:
             labels=(labels or {}).get("dispersion"),
             times=times,
             value_range=value_range,
+            color=disp.get("color"),
         )
 
         # Fitted-distribution moments, shown outside the plot.
@@ -157,4 +161,54 @@ def register(app: Dash) -> None:
             if val:
                 fit_colors[item["id"]["index"]] = val
         disp["fit_colors"] = fit_colors
+        return disp
+
+    # --- Bottom chip for the single selected variable ---------------------- #
+    @app.callback(
+        Output("dispersion-chips", "children"),
+        Input("disp-store", "data"),
+        Input("labels-store", "data"),
+        Input("chip-open", "data"),
+    )
+    def chip(disp, labels, open_id):
+        disp = disp or {}
+        col = disp.get("col")
+        if not col:
+            return html.Span("Pick ONE variable on the right.", style=T.CHIP_HINT)
+        color = disp.get("color") or THEME["accent"]
+        name = series_name((labels or {}).get("dispersion"), col, col)
+        is_open = open_id == col
+        menu = [
+            html.P("Series options", style=T.POPOVER_TITLE),
+            field("Colour", dcc.Dropdown(
+                id="disp-color", options=color_options(color), value=color,
+                clearable=False, searchable=False,
+                style={"color": "#111", "fontSize": "11px"})),
+            field("Rename", dcc.Input(
+                id={"type": "series-name", "index": col}, type="text",
+                value=series_name((labels or {}).get("dispersion"), col, "") or "",
+                debounce=True, placeholder=col,
+                style={**T.SMALL_INPUT, "width": "100%",
+                       "boxSizing": "border-box"})),
+        ]
+        return html.Div([
+            html.Button([html.Span(style=T.chip_dot(color)),
+                         html.Span(name, style=T.CHIP_NAME)],
+                        id={"type": "disp-chip", "index": col}, n_clicks=0,
+                        style=T.chip(is_open)),
+            html.Div(menu, style=T.chip_popover(is_open)),
+        ], style=T.CHIP_WRAP)
+
+    # --- Apply the chip colour edit ---------------------------------------- #
+    @app.callback(
+        Output("disp-store", "data", allow_duplicate=True),
+        Input("disp-color", "value"),
+        State("disp-store", "data"),
+        prevent_initial_call=True,
+    )
+    def apply_color(color, disp):
+        if not color:
+            raise PreventUpdate
+        disp = dict(disp or {})
+        disp["color"] = color
         return disp

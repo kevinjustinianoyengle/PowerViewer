@@ -56,7 +56,10 @@ def create_app() -> Dash:
     """Build and configure the Dash application."""
     ensure_folders()  # first-run: make '1. Data' and '2. Screenshots'
 
-    app = Dash(__name__, title="PowerViewer", update_title=None)
+    # suppress_callback_exceptions: chip/series options are created dynamically
+    # inside popovers, so some callback targets aren't present in the initial DOM.
+    app = Dash(__name__, title="PowerViewer", update_title=None,
+               suppress_callback_exceptions=True)
     app.index_string = INDEX_STRING
     app.layout = build_layout()
     register_all(app)

@@ -52,21 +52,25 @@ def register(app: Dash) -> None:
         Output("disp-store", "data", allow_duplicate=True),
         Output("trend-store", "data", allow_duplicate=True),
         Output("multi-store", "data", allow_duplicate=True),
+        Output("regression-store", "data", allow_duplicate=True),
         Output("marks-store", "data", allow_duplicate=True),
         Input("file-dropdown", "value"),
         Input("table-dropdown", "value"),
         prevent_initial_call="initial_duplicate",
     )
     def load_file(filename, table):
-        empty_marks = {"dispersion": [], "trend": [], "multi_trend": []}
-        reset_disp = {"col": None, "fit_colors": {}}
+        empty_marks = {"dispersion": [], "trend": [], "multi_trend": [],
+                       "regression": []}
+        reset_disp = {"col": None, "color": None, "fit_colors": {}}
         reset_trend = {"x": None, "y": None, "series": []}
         reset_multi = {"x": None, "series": [], "axis_cfg": {"share_zero": True}}
+        reset_reg = {"x": None, "y": None, "color": None, "scale": 1.0,
+                     "displace": 0.0}
 
         if not filename:
             return (None, None, [],
                     "No data loaded — drop a file into '1. Data' and Refresh.",
-                    reset_disp, reset_trend, reset_multi, empty_marks)
+                    reset_disp, reset_trend, reset_multi, reset_reg, empty_marks)
 
         is_db = filename.lower().endswith(_DB_EXT)
         if is_db:
@@ -82,7 +86,7 @@ def register(app: Dash) -> None:
             cols = plottable_columns(filename, table)
         except Exception as exc:  # noqa: BLE001
             return (None, None, [], f"⚠ Could not read '{filename}': {exc}",
-                    reset_disp, reset_trend, reset_multi, empty_marks)
+                    reset_disp, reset_trend, reset_multi, reset_reg, empty_marks)
 
         rows = len(df)
         total_cols = len(df.columns)
@@ -91,7 +95,7 @@ def register(app: Dash) -> None:
                   + f" — {rows:,} rows · {total_cols} fields "
                   f"· {len(cols)} plottable")
         return (filename, table, cols, status,
-                reset_disp, reset_trend, reset_multi, empty_marks)
+                reset_disp, reset_trend, reset_multi, reset_reg, empty_marks)
 
     # --- Viewer carousel: set the active view + button highlighting -------- #
     @app.callback(
@@ -117,9 +121,11 @@ def register(app: Dash) -> None:
         Output("dispersion-graph-wrap", "style"),
         Output("trend-graph-wrap", "style"),
         Output("multi-graph-wrap", "style"),
+        Output("regression-graph-wrap", "style"),
         Output("dispersion-options", "style"),
         Output("trend-options", "style"),
         Output("multi-options", "style"),
+        Output("regression-options", "style"),
         Input("active-view", "data"),
     )
     def toggle_visibility(active):
@@ -131,4 +137,6 @@ def register(app: Dash) -> None:
             return {"display": "block" if key == active else "none"}
 
         return (vis("dispersion"), vis("trend"), vis("multi_trend"),
-                opt("dispersion"), opt("trend"), opt("multi_trend"))
+                vis("regression"),
+                opt("dispersion"), opt("trend"), opt("multi_trend"),
+                opt("regression"))

@@ -6,24 +6,8 @@ Overrides live in ``labels-store`` keyed by viewer:
 
 from __future__ import annotations
 
-from dash import ALL, Dash, Input, Output, State, ctx, dcc, html
+from dash import ALL, Dash, Input, Output, State, ctx
 from dash.exceptions import PreventUpdate
-
-from ..config import THEME
-from ..ui import theme as T
-
-
-def _series_cols(active, disp, trend, multi):
-    """Columns whose legend entry can be renamed for the active viewer.
-
-    Trend / Multiple Trend rename their series directly on the cards, so only
-    the dispersion histogram needs a legend-rename field here.
-    """
-    if active == "dispersion":
-        c = (disp or {}).get("col")
-        return [c] if c else []
-    return []
-
 
 def register(app: Dash) -> None:
 
@@ -71,36 +55,7 @@ def register(app: Dash) -> None:
         labels[active] = entry
         return labels
 
-    # --- Render per-series rename inputs ----------------------------------- #
-    @app.callback(
-        Output("legend-editor", "children"),
-        Input("active-view", "data"),
-        Input("disp-store", "data"),
-        Input("trend-store", "data"),
-        Input("multi-store", "data"),
-        State("labels-store", "data"),
-    )
-    def legend_editor(active, disp, trend, multi, labels):
-        cols = _series_cols(active, disp, trend, multi)
-        if not cols:
-            return html.Span("Select variables to rename their legend entries.",
-                             style=T.CAPTION_DESC)
-        series = ((labels or {}).get(active, {}) or {}).get("series", {})
-        rows = []
-        for col in cols:
-            rows.append(html.Div([
-                html.Span(col, style={"fontSize": "11px",
-                                      "color": THEME["muted"]}),
-                dcc.Input(
-                    id={"type": "series-name", "index": col},
-                    type="text", debounce=True,
-                    value=series.get(col, ""), placeholder=col,
-                    style={**T.SMALL_INPUT, "width": "120px"},
-                ),
-            ], style={"display": "flex", "alignItems": "center", "gap": "4px"}))
-        return rows
-
-    # --- Save legend renames ---------------------------------------------- #
+    # --- Save legend renames (chip "Rename" inputs use the same ids) ------- #
     @app.callback(
         Output("labels-store", "data", allow_duplicate=True),
         Input({"type": "series-name", "index": ALL}, "value"),

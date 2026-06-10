@@ -87,6 +87,14 @@ VIEWERS = [
                 "line gets an orange tone you can recolour and a scale factor; "
                 "the axes auto-fit dynamically.",
     },
+    {
+        "key": "regression",
+        "label": "Scatter + Regression",
+        "icon": "⁘",  # scattered dots
+        "help": "Pick TWO variables (X then Y). Points are scattered; toggle a "
+                "least-squares regression line showing its equation and R² on "
+                "the graph. The fit recomputes from the points you zoom into.",
+    },
 ]
 
 DEFAULT_VIEWER = VIEWERS[0]["key"]

@@ -14,7 +14,7 @@ from dash.exceptions import PreventUpdate
 from ..config import palette_color
 from ..data import load_dataframe
 from ..graphs import trend
-from ..ui.cards import render_series_cards
+from ..ui.cards import render_series_chips
 
 PREFIX = "tr"
 
@@ -64,13 +64,15 @@ def register(app: Dash) -> None:
             labels=(labels or {}).get("trend"))
         return fig, f"X: {x_col or '—'}   |   Y: {y_col or '—'}"
 
-    # --- Cards ------------------------------------------------------------- #
+    # --- Chips (bottom bar; each opens a per-series options popover) -------- #
     @app.callback(
-        Output("trend-line-controls", "children"),
+        Output("trend-chips", "children"),
         Input("trend-store", "data"),
+        Input("chip-open", "data"),
     )
-    def cards(store):
-        return render_series_cards((store or {}).get("series") or [], PREFIX)
+    def chips(store, open_id):
+        return render_series_chips((store or {}).get("series") or [], PREFIX,
+                                   open_id=open_id)
 
     # --- Edit name / colour / scale / displace ----------------------------- #
     @app.callback(

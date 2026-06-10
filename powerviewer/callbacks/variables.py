@@ -22,19 +22,20 @@ from ..graphs.trend import raw_series as trend_raw_series
 from ..ui import theme as T
 
 
-def _state_for(col, active, disp, trend, multi):
+def _state_for(col, active, disp, trend, multi, reg):
     """Return the visual state of *col* for the active viewer."""
     if active == "dispersion":
         sel = disp.get("col")
         if col == sel:
             return "y"
         return "disabled" if sel else "idle"
-    if active == "trend":
-        if col == trend.get("x"):
+    if active in ("trend", "regression"):
+        store = trend if active == "trend" else reg
+        if col == store.get("x"):
             return "x"
-        if col == trend.get("y"):
+        if col == store.get("y"):
             return "y"
-        both = trend.get("x") and trend.get("y")
+        both = store.get("x") and store.get("y")
         return "disabled" if both else "idle"
     if active == "multi_trend":
         if col == multi.get("x"):
@@ -55,17 +56,19 @@ def register(app: Dash) -> None:
         Input("disp-store", "data"),
         Input("trend-store", "data"),
         Input("multi-store", "data"),
+        Input("regression-store", "data"),
     )
-    def render_vars(columns, active, disp, trend, multi):
+    def render_vars(columns, active, disp, trend, multi, reg):
         if not columns:
             return html.Span("Load a data file.",
                              style={"color": THEME["muted"], "fontSize": "11px"})
         disp = disp or {}
         trend = trend or {}
         multi = multi or {}
+        reg = reg or {}
         buttons = []
         for col in columns:
-            state = _state_for(col, active, disp, trend, multi)
+            state = _state_for(col, active, disp, trend, multi, reg)
             buttons.append(html.Button(
                 col,
                 id={"type": "var-btn", "index": col},
@@ -81,14 +84,16 @@ def register(app: Dash) -> None:
         Output("disp-store", "data"),
         Output("trend-store", "data"),
         Output("multi-store", "data"),
+        Output("regression-store", "data"),
         Input({"type": "var-btn", "index": ALL}, "n_clicks"),
         State("active-view", "data"),
         State("disp-store", "data"),
         State("trend-store", "data"),
         State("multi-store", "data"),
+        State("regression-store", "data"),
         prevent_initial_call=True,
     )
-    def select(_clicks, active, disp, trend, multi):
+    def select(_clicks, active, disp, trend, multi, reg):
         # Ignore the spurious fire when buttons are (re)mounted with n_clicks=0.
         trig = ctx.triggered_id
         if not trig or not ctx.triggered or not ctx.triggered[0]["value"]:
@@ -98,10 +103,11 @@ def register(app: Dash) -> None:
         disp = dict(disp or {})
         trend = {**{"x": None, "y": None, "series": []}, **(trend or {})}
         multi = {**{"x": None, "series": []}, **(multi or {})}
+        reg = {**{"x": None, "y": None}, **(reg or {})}
 
         if active == "dispersion":
             disp["col"] = None if disp.get("col") == col else col
-            return disp, no_update, no_update
+            return disp, no_update, no_update, no_update
 
         if active == "trend":
             x, y = trend.get("x"), trend.get("y")
@@ -116,7 +122,19 @@ def register(app: Dash) -> None:
                 trend["y"] = col
                 trend["series"] = [trend_raw_series(col)]
             # both already set & a different col -> blocked (handled in render)
-            return no_update, trend, no_update
+            return no_update, trend, no_update, no_update
+
+        if active == "regression":
+            x, y = reg.get("x"), reg.get("y")
+            if col == x:
+                reg["x"] = None
+            elif col == y:
+                reg["y"] = None
+            elif x is None:
+                reg["x"] = col
+            elif y is None:
+                reg["y"] = col
+            return no_update, no_update, no_update, reg
 
         if active == "multi_trend":
             series = list(multi.get("series") or [])
@@ -141,6 +159,6 @@ def register(app: Dash) -> None:
                     "color": palette_color(n_raw), "scale": 1.0,
                     "displace": 0.0})
                 multi["series"] = series
-            return no_update, no_update, multi
+            return no_update, no_update, multi, no_update
 
         raise PreventUpdate

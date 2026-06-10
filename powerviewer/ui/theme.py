@@ -16,11 +16,14 @@ FONT_STACK = "'Segoe UI', system-ui, -apple-system, sans-serif"
 # --------------------------------------------------------------------------- #
 PAGE = {
     "display": "grid",
-    # Variables panel reduced by 15% (260px -> 221px). Graphs are now chosen
-    # from the burger sidebar, so the top carousel row is gone.
+    # Variables panel reduced by 15% (260px -> 221px). Graphs are chosen from the
+    # burger sidebar. Two new full-width rows frame the graph: a top **ribbon**
+    # (labels / axes / marks / view options) and a bottom **chip bar** (the series
+    # shown in the graph, each opening its own options popover).
     "gridTemplateColumns": "1fr 221px",
-    "gridTemplateRows": "auto 1fr auto",
-    "gridTemplateAreas": "'header header' 'graph vars' 'options options'",
+    "gridTemplateRows": "auto auto 1fr auto",
+    "gridTemplateAreas": ("'header header' 'ribbon ribbon' "
+                          "'graph vars' 'chips chips'"),
     "height": "100vh",
     "width": "100vw",
     "margin": "0",
@@ -309,3 +312,146 @@ SMALL_INPUT = {
     "border": f"1px solid {THEME['border']}", "backgroundColor": THEME["bg"],
     "color": THEME["text"], "fontSize": "12px", "width": "110px",
 }
+
+# --------------------------------------------------------------------------- #
+# Top options ribbon: a slim toolbar under the header. Each button toggles a
+# floating popover anchored beneath it (Labels / Axes / Marks / View options).
+# --------------------------------------------------------------------------- #
+RIBBON = {
+    "gridArea": "ribbon",
+    "display": "flex",
+    "alignItems": "center",
+    "gap": "4px",
+    "padding": "6px 14px",
+    "backgroundColor": THEME["panel_alt"],
+    "borderBottom": f"1px solid {THEME['border']}",
+    # Anchor for the absolutely-positioned popovers (kept in normal flow but
+    # raised above the graph so menus overlay it instead of resizing it).
+    "position": "relative",
+    "zIndex": "60",
+}
+
+# Wrapper around one ribbon button + its popover (so the popover anchors here).
+RIBBON_MENU = {"position": "relative", "display": "inline-flex"}
+
+RIBBON_DIVIDER = {"width": "1px", "alignSelf": "stretch",
+                  "backgroundColor": THEME["border"], "margin": "2px 6px"}
+
+
+def ribbon_button(active: bool) -> dict:
+    return {
+        "display": "inline-flex", "alignItems": "center", "gap": "7px",
+        "padding": "7px 13px", "borderRadius": "8px",
+        "border": f"1px solid {THEME['accent'] if active else 'transparent'}",
+        "backgroundColor": THEME["accent_soft"] if active else "transparent",
+        "color": THEME["accent"] if active else THEME["text"],
+        "cursor": "pointer", "fontSize": "13px", "fontWeight": "600",
+        "whiteSpace": "nowrap", "transition": "all .12s ease",
+    }
+
+
+def ribbon_popover(open_: bool) -> dict:
+    return {
+        "display": "block" if open_ else "none",
+        "position": "absolute", "top": "calc(100% + 8px)", "left": "0",
+        "minWidth": "260px", "maxWidth": "560px",
+        "backgroundColor": THEME["panel"],
+        "border": f"1px solid {THEME['border']}", "borderRadius": "12px",
+        "boxShadow": "0 10px 30px rgba(0,0,0,0.18)",
+        "padding": "14px", "zIndex": "70",
+    }
+
+
+POPOVER_TITLE = {"fontSize": "11px", "textTransform": "uppercase",
+                 "letterSpacing": "1px", "color": THEME["muted"],
+                 "margin": "0 0 10px 0", "fontWeight": "700"}
+
+POPOVER_FIELD = {"display": "flex", "flexDirection": "column", "gap": "4px",
+                 "marginBottom": "10px"}
+
+POPOVER_FIELD_ROW = {"display": "flex", "alignItems": "center", "gap": "8px",
+                     "flexWrap": "wrap"}
+
+# --------------------------------------------------------------------------- #
+# Bottom chip bar: the series currently drawn in the graph. Each chip shows a
+# colour dot + name (+ L/R axis badge for Multiple Trend) and, when clicked,
+# raises a popover *above* it with that series' options.
+# --------------------------------------------------------------------------- #
+CHIP_BAR = {
+    "gridArea": "chips",
+    "display": "flex",
+    "alignItems": "center",
+    "gap": "10px",
+    "flexWrap": "wrap",
+    "padding": "10px 16px",
+    "minHeight": "44px",
+    "backgroundColor": THEME["panel"],
+    "borderTop": f"1px solid {THEME['border']}",
+    "position": "relative",
+    "boxSizing": "border-box",
+}
+
+CHIP_WRAP = {"position": "relative", "display": "inline-flex"}
+
+
+def chip(active: bool) -> dict:
+    return {
+        "display": "inline-flex", "alignItems": "center", "gap": "9px",
+        "padding": "8px 14px", "borderRadius": "20px",
+        "border": f"1px solid {THEME['accent'] if active else THEME['border']}",
+        "backgroundColor": THEME["accent_soft"] if active else THEME["panel_alt"],
+        "color": THEME["text"], "cursor": "pointer", "fontSize": "13px",
+        "fontWeight": "600", "maxWidth": "260px",
+        "transition": "all .12s ease",
+    }
+
+
+def chip_dot(color: str) -> dict:
+    return {"display": "inline-block", "width": "11px", "height": "11px",
+            "borderRadius": "50%", "backgroundColor": color,
+            "flex": "0 0 auto",
+            "border": f"1px solid {THEME['border']}"}
+
+
+CHIP_NAME = {"overflow": "hidden", "textOverflow": "ellipsis",
+             "whiteSpace": "nowrap", "maxWidth": "200px"}
+
+CHIP_AXIS_BADGE = {
+    "fontSize": "10px", "fontWeight": "700", "lineHeight": "1",
+    "padding": "3px 6px", "borderRadius": "6px",
+    "border": f"1px solid {THEME['border']}", "color": THEME["muted"],
+    "backgroundColor": THEME["panel"],
+}
+
+
+def chip_popover(open_: bool) -> dict:
+    return {
+        "display": "block" if open_ else "none",
+        "position": "absolute", "bottom": "calc(100% + 10px)", "left": "0",
+        "minWidth": "240px",
+        "backgroundColor": THEME["panel"],
+        "border": f"1px solid {THEME['border']}", "borderRadius": "12px",
+        "boxShadow": "0 -10px 30px rgba(0,0,0,0.18)",
+        "padding": "14px", "zIndex": "80",
+    }
+
+
+CHIP_BADGE = {"fontSize": "10px", "fontWeight": "700", "color": THEME["accent"],
+              "backgroundColor": THEME["accent_soft"], "padding": "2px 7px",
+              "borderRadius": "6px"}
+
+CHIP_REMOVE = {
+    "border": "none", "background": "none", "color": "#d2493f",
+    "cursor": "pointer", "fontSize": "12.5px", "fontWeight": "600",
+    "padding": "4px 0 0 0", "textAlign": "left",
+}
+
+# Small action buttons inside a chip popover (+d/dx, +∫).
+CHIP_ACTION = {
+    "border": f"1px solid {THEME['border']}", "borderRadius": "7px",
+    "backgroundColor": THEME["panel_alt"], "color": THEME["accent"],
+    "cursor": "pointer", "fontSize": "12px", "padding": "5px 10px",
+    "fontWeight": "700",
+}
+
+CHIP_HINT = {"color": THEME["muted"], "fontSize": "12.5px"}

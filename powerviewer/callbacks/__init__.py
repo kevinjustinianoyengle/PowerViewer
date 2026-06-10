@@ -10,11 +10,13 @@ from dash import Dash
 from . import (
     data_callbacks,
     shell_callbacks,
+    ribbon_callbacks,
     labels_callbacks,
     variables,
     dispersion_callbacks,
     trend_callbacks,
     multi_callbacks,
+    regression_callbacks,
     marks_callbacks,
 )
 
@@ -23,9 +25,11 @@ def register_all(app: Dash) -> None:
     """Register every callback group on *app*."""
     data_callbacks.register(app)
     shell_callbacks.register(app)
+    ribbon_callbacks.register(app)
     labels_callbacks.register(app)
     variables.register(app)
     dispersion_callbacks.register(app)
     trend_callbacks.register(app)
     multi_callbacks.register(app)
+    regression_callbacks.register(app)
     marks_callbacks.register(app)

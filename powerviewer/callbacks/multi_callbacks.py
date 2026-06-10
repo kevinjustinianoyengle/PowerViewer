@@ -15,7 +15,7 @@ from dash.exceptions import PreventUpdate
 from ..config import palette_color, secondary_color
 from ..data import load_dataframe
 from ..graphs import multi_trend
-from ..ui.cards import render_series_cards
+from ..ui.cards import render_series_chips
 
 PREFIX = "mt"
 
@@ -41,23 +41,30 @@ def register(app: Dash) -> None:
     def render(store, marks, labels, filename, table):
         store = store or {}
         series = store.get("series") or []
+        cfg = store.get("axis_cfg") or {}
         df = load_dataframe(filename, table) if filename else None
         fig = multi_trend.build_figure(
             df, store.get("x"), series,
             marks=(marks or {}).get("multi_trend"),
             labels=(labels or {}).get("multi_trend"),
-            axis_cfg=store.get("axis_cfg") or {})
-        fig.update_layout(uirevision="|".join(s["id"] for s in series) or "empty")
+            axis_cfg=cfg)
+        # uirevision keys the preserved view. Include axis_cfg so toggling
+        # shared-zero / editing a manual range actually re-applies the new axis
+        # ranges (otherwise Plotly keeps the previous view and ignores them).
+        rev = "|".join(s["id"] for s in series) or "empty"
+        rev += "::" + repr(sorted((k, str(v)) for k, v in cfg.items()))
+        fig.update_layout(uirevision=rev)
         return fig
 
-    # --- Cards ------------------------------------------------------------- #
+    # --- Chips (bottom bar; each opens a per-series options popover) -------- #
     @app.callback(
-        Output("multi-line-controls", "children"),
+        Output("multi-chips", "children"),
         Input("multi-store", "data"),
+        Input("chip-open", "data"),
     )
-    def cards(store):
-        return render_series_cards((store or {}).get("series") or [], PREFIX,
-                                   allow_axis=True)
+    def chips(store, open_id):
+        return render_series_chips((store or {}).get("series") or [], PREFIX,
+                                   allow_axis=True, open_id=open_id)
 
     # --- Edit name / colour / scale / displace / axis ---------------------- #
     @app.callback(

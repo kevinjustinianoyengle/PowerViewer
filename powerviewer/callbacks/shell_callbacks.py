@@ -16,6 +16,7 @@ _GRAPH_OF = {
     "dispersion": ("dispersion-graph", "dispersion"),
     "trend": ("trend-graph", "trend"),
     "multi_trend": ("multi-graph", "multi_trend"),
+    "regression": ("regression-graph", "regression"),
 }
 
 # Axes whose zoom we mirror into the figure before exporting.
@@ -94,17 +95,20 @@ def register(app: Dash) -> None:
         State("dispersion-graph", "figure"),
         State("trend-graph", "figure"),
         State("multi-graph", "figure"),
+        State("regression-graph", "figure"),
         # User zoom/pan lives in relayoutData, NOT in the figure prop, so we must
         # read it to capture the current (zoomed) view rather than the full plot.
         State("dispersion-graph", "relayoutData"),
         State("trend-graph", "relayoutData"),
         State("multi-graph", "relayoutData"),
+        State("regression-graph", "relayoutData"),
         prevent_initial_call=True,
     )
-    def screenshot(_n, active, disp_fig, trend_fig, multi_fig,
-                   disp_rl, trend_rl, multi_rl):
+    def screenshot(_n, active, disp_fig, trend_fig, multi_fig, reg_fig,
+                   disp_rl, trend_rl, multi_rl, reg_rl):
         figs = {"dispersion": (disp_fig, disp_rl), "trend": (trend_fig, trend_rl),
-                "multi_trend": (multi_fig, multi_rl)}
+                "multi_trend": (multi_fig, multi_rl),
+                "regression": (reg_fig, reg_rl)}
         fig_dict, relayout = figs.get(active, (None, None))
         if not fig_dict:
             return "Nothing to capture yet."
