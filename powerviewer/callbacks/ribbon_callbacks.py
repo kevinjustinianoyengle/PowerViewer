@@ -13,9 +13,9 @@ from dash.exceptions import PreventUpdate
 
 from ..ui import theme as T
 
-_RIBBON_KEYS = ["labels", "axes", "marks", "view"]
+_RIBBON_KEYS = ["labels", "axes", "combine", "marks", "view"]
 _VIEW_LABEL = {"dispersion": "Distribution", "trend": "Trend",
-               "multi_trend": "Add Sum", "regression": "Regression"}
+               "multi_trend": "Display"}
 
 
 def register(app: Dash) -> None:
@@ -25,13 +25,14 @@ def register(app: Dash) -> None:
         Output("ribbon-open", "data"),
         Input("ribbon-btn-labels", "n_clicks"),
         Input("ribbon-btn-axes", "n_clicks"),
+        Input("ribbon-btn-combine", "n_clicks"),
         Input("ribbon-btn-marks", "n_clicks"),
         Input("ribbon-btn-view", "n_clicks"),
         Input("active-view", "data"),
         State("ribbon-open", "data"),
         prevent_initial_call=True,
     )
-    def toggle_ribbon(_l, _a, _m, _v, _active, current):
+    def toggle_ribbon(_l, _a, _c, _m, _v, _active, current):
         trig = ctx.triggered_id
         if trig == "active-view":     # switching viewer closes any open popover
             return None
@@ -42,10 +43,12 @@ def register(app: Dash) -> None:
     @app.callback(
         Output("ribbon-pop-labels", "style"),
         Output("ribbon-pop-axes", "style"),
+        Output("ribbon-pop-combine", "style"),
         Output("ribbon-pop-marks", "style"),
         Output("ribbon-pop-view", "style"),
         Output("ribbon-btn-labels", "style"),
         Output("ribbon-btn-axes", "style"),
+        Output("ribbon-btn-combine", "style"),
         Output("ribbon-btn-marks", "style"),
         Output("ribbon-btn-view", "style"),
         Input("ribbon-open", "data"),
@@ -61,12 +64,11 @@ def register(app: Dash) -> None:
         Input({"type": "tr-chip", "index": ALL}, "n_clicks"),
         Input({"type": "mt-chip", "index": ALL}, "n_clicks"),
         Input({"type": "disp-chip", "index": ALL}, "n_clicks"),
-        Input({"type": "reg-chip", "index": ALL}, "n_clicks"),
         Input("active-view", "data"),
         State("chip-open", "data"),
         prevent_initial_call=True,
     )
-    def toggle_chip(_tr, _mt, _dn, _rn, _active, current):
+    def toggle_chip(_tr, _mt, _dn, _active, current):
         trig = ctx.triggered_id
         if trig == "active-view":       # switching viewer closes any chip popover
             return None
@@ -80,8 +82,8 @@ def register(app: Dash) -> None:
         Output("dispersion-chips", "style"),
         Output("trend-chips", "style"),
         Output("multi-chips", "style"),
-        Output("regression-chips", "style"),
         Output("ribbon-axes-menu", "style"),
+        Output("ribbon-combine-menu", "style"),
         Output("ribbon-btn-view", "children"),
         Input("active-view", "data"),
     )
@@ -90,10 +92,11 @@ def register(app: Dash) -> None:
             return {"display": "flex" if key == active else "none",
                     "alignItems": "center", "gap": "10px", "flexWrap": "wrap"}
 
-        axes_menu = {**T.RIBBON_MENU,
-                     "display": "inline-flex" if active == "multi_trend"
-                     else "none"}
+        # Adjust Axes and Combine are Multiple-Trend only.
+        multi_only = {**T.RIBBON_MENU,
+                      "display": "inline-flex" if active == "multi_trend"
+                      else "none"}
         view_label = [html.Span("⚙"),
                       html.Span(_VIEW_LABEL.get(active, "View"))]
         return (sec("dispersion"), sec("trend"), sec("multi_trend"),
-                sec("regression"), axes_menu, view_label)
+                multi_only, dict(multi_only), view_label)

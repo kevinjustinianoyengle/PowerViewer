@@ -17,7 +17,8 @@ Two full-width zones frame the graph:
 * the **top ribbon** holds *view-wide* options — each button raises a floating
   popover beneath it: **Edit Labels** (titles), **Adjust Axes** (Multiple-Trend
   dual-axis ranges), **Marks** (horizontal / vertical / point), and **View**
-  (the active viewer's own controls: distribution, swap, sum, regression …);
+  (the active viewer's own controls: distribution / trend swap / line↔scatter +
+  sum). Per-curve regression lives on the Multiple-Trend chips, not here;
 * the **bottom chip bar** lists the *series drawn in the graph*. Each chip shows
   the series colour + name (+ L/R axis badge for Multiple Trend) and, when
   clicked, raises a popover *above it* with that series' options.
@@ -69,8 +70,13 @@ def _header() -> html.Div:
         ),
         html.Button("⟳ Refresh", id="refresh-files", n_clicks=0, style=T.BUTTON),
         html.Span(id="data-status", style=T.STATUS),
+        # Quick graph-title editor for the active viewer (syncs with Edit Labels).
+        dcc.Input(id="header-title", type="text", debounce=True,
+                  placeholder="Graph title…",
+                  style={**T.SMALL_INPUT, "width": "180px",
+                         "marginLeft": "12px"}),
         html.Button("📷 Screenshot", id="save-screenshot", n_clicks=0,
-                    style={**T.BUTTON_ACCENT, "marginLeft": "12px"}),
+                    style={**T.BUTTON_ACCENT, "marginLeft": "8px"}),
     ], style=T.HEADER)
 
 
@@ -237,42 +243,42 @@ def _trend_options() -> html.Div:
 
 
 def _multi_options() -> html.Div:
+    """Multiple-Trend **Display** popover (the per-graph ⚙ View button)."""
     return html.Div([
-        html.Span("Sum two lines", style=T.SECTION_LABEL),
+        html.Span("Display", style=T.SECTION_LABEL),
+        dcc.RadioItems(
+            id="multi-style",
+            options=[{"label": " Lines (connected)", "value": "lines"},
+                     {"label": " Scatter (points)", "value": "scatter"}],
+            value="lines", labelStyle={"display": "block", "marginBottom": "3px"}),
+        html.P("Scatter mode unlocks a per-curve regression line in each chip "
+               "(bottom).", style={**T.CHIP_HINT, "margin": "4px 0 0 0"}),
+    ], style={"minWidth": "240px"})
+
+
+def _combine_popover() -> html.Div:
+    """Multiple-Trend **Combine** popover: a OP b → a new derived line."""
+    return html.Div([
+        html.P("Combine two lines", style=T.POPOVER_TITLE),
         html.Div([
             dcc.Dropdown(id="multi-sum-a", placeholder="line A",
-                         style={"width": "180px", "color": "#111",
+                         style={"width": "170px", "color": "#111",
                                 "fontSize": "12px"}),
-            html.Span("+", style={"color": THEME["muted"]}),
+            dcc.Dropdown(
+                id="multi-op",
+                options=[{"label": "+  add", "value": "+"},
+                         {"label": "−  subtract", "value": "-"},
+                         {"label": "×  multiply", "value": "*"},
+                         {"label": "÷  divide", "value": "/"}],
+                value="+", clearable=False, searchable=False,
+                style={"width": "120px", "color": "#111", "fontSize": "12px"}),
             dcc.Dropdown(id="multi-sum-b", placeholder="line B",
-                         style={"width": "180px", "color": "#111",
+                         style={"width": "170px", "color": "#111",
                                 "fontSize": "12px"}),
         ], style={**T.POPOVER_FIELD_ROW, "margin": "8px 0"}),
-        html.Button("+ Add sum", id="multi-sum-add", n_clicks=0,
+        html.Button("+ Add combined line", id="multi-sum-add", n_clicks=0,
                     style=T.BUTTON_ACCENT),
-    ], style={"minWidth": "260px"})
-
-
-def _regression_options() -> html.Div:
-    return html.Div([
-        html.Button("⇄ Swap X / Y", id="reg-swap", n_clicks=0,
-                    style=T.BUTTON_ACCENT),
-        html.Div(dcc.Checklist(
-            id="reg-show-fit",
-            options=[{"label": " Regression line", "value": "on"}],
-            value=["on"]), style={"margin": "10px 0"}),
-        html.Span("Equation box", style=T.SECTION_LABEL),
-        dcc.Dropdown(
-            id="reg-annot-pos",
-            options=[{"label": "Top-left", "value": "tl"},
-                     {"label": "Top-right", "value": "tr"},
-                     {"label": "Bottom-left", "value": "bl"},
-                     {"label": "Bottom-right", "value": "br"}],
-            value="tl", clearable=False, searchable=False,
-            style={"width": "160px", "color": "#111", "marginTop": "4px"}),
-        html.Div(id="reg-axes-label",
-                 style={**T.STATUS, "marginLeft": "0", "marginTop": "8px"}),
-    ], style={"minWidth": "240px"})
+    ], style={"minWidth": "300px"})
 
 
 def _view_popover() -> html.Div:
@@ -282,8 +288,6 @@ def _view_popover() -> html.Div:
                  style={"display": "block"}),
         html.Div(_trend_options(), id="trend-options", style={"display": "none"}),
         html.Div(_multi_options(), id="multi-options", style={"display": "none"}),
-        html.Div(_regression_options(), id="regression-options",
-                 style={"display": "none"}),
     ])
 
 
@@ -293,6 +297,9 @@ def _ribbon() -> html.Div:
               _labels_popover()),
         _menu("axes", [html.Span("⇄"), html.Span("Adjust Axes")],
               _axes_popover(), wrap_id="ribbon-axes-menu"),
+        # Combine (Multiple-Trend only) — shown/hidden by ribbon_callbacks.chrome.
+        _menu("combine", [html.Span("Σ"), html.Span("Combine")],
+              _combine_popover(), wrap_id="ribbon-combine-menu"),
         html.Div(style=T.RIBBON_DIVIDER),
         _menu("marks", [html.Span("⚐"), html.Span("Marks")], _marks_popover()),
         _menu("view", [html.Span("⚙"), html.Span("View")], _view_popover()),
@@ -310,10 +317,6 @@ def _graph_area() -> html.Div:
                  style={"flex": "1", "minHeight": "0", "display": "none"}),
         html.Div(dcc.Graph(id="multi-graph", style=T.GRAPH, config=GRAPH_CONFIG),
                  id="multi-graph-wrap",
-                 style={"flex": "1", "minHeight": "0", "display": "none"}),
-        html.Div(dcc.Graph(id="regression-graph", style=T.GRAPH,
-                           config=GRAPH_CONFIG),
-                 id="regression-graph-wrap",
                  style={"flex": "1", "minHeight": "0", "display": "none"}),
     ]
     return html.Div(graphs,
@@ -339,7 +342,6 @@ def _chip_bar() -> html.Div:
         html.Div(id="dispersion-chips", style=hidden),
         html.Div(id="trend-chips", style=hidden),
         html.Div(id="multi-chips", style=hidden),
-        html.Div(id="regression-chips", style=hidden),
     ], style=T.CHIP_BAR)
 
 
@@ -357,14 +359,10 @@ def _stores() -> list:
                   data={"col": None, "color": None, "fit_colors": {}}),
         dcc.Store(id="trend-store", data={"x": None, "y": None, "series": []}),
         dcc.Store(id="multi-store",
-                  data={"x": None, "series": [],
+                  data={"x": None, "series": [], "style": "lines",
                         "axis_cfg": {"share_zero": True}}),
-        dcc.Store(id="regression-store",
-                  data={"x": None, "y": None, "color": None,
-                        "scale": 1.0, "displace": 0.0}),
         dcc.Store(id="marks-store",
-                  data={"dispersion": [], "trend": [], "multi_trend": [],
-                        "regression": []}),
+                  data={"dispersion": [], "trend": [], "multi_trend": []}),
         dcc.Store(id="labels-store",
                   data={k["key"]: {"title": "", "xaxis": "", "yaxis": "",
                                    "series": {}} for k in VIEWERS}),

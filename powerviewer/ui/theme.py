@@ -424,11 +424,12 @@ CHIP_AXIS_BADGE = {
 }
 
 
-def chip_popover(open_: bool) -> dict:
+def chip_popover(open_: bool, wide: bool = False) -> dict:
     return {
         "display": "block" if open_ else "none",
         "position": "absolute", "bottom": "calc(100% + 10px)", "left": "0",
-        "minWidth": "240px",
+        "width": "380px" if wide else "auto",
+        "minWidth": "380px" if wide else "240px",
         "backgroundColor": THEME["panel"],
         "border": f"1px solid {THEME['border']}", "borderRadius": "12px",
         "boxShadow": "0 -10px 30px rgba(0,0,0,0.18)",

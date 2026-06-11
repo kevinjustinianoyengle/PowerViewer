@@ -85,15 +85,9 @@ VIEWERS = [
         "icon": "≡",  # ≡
         "help": "Pick ONE X variable, then any number of Y variables. Each "
                 "line gets an orange tone you can recolour and a scale factor; "
-                "the axes auto-fit dynamically.",
-    },
-    {
-        "key": "regression",
-        "label": "Scatter + Regression",
-        "icon": "⁘",  # scattered dots
-        "help": "Pick TWO variables (X then Y). Points are scattered; toggle a "
-                "least-squares regression line showing its equation and R² on "
-                "the graph. The fit recomputes from the points you zoom into.",
+                "the axes auto-fit dynamically. Switch to Scatter (top ribbon) "
+                "to unconnect the points and enable a per-curve regression line "
+                "from that curve's chip.",
     },
 ]
 

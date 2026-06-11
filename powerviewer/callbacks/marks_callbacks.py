@@ -14,7 +14,7 @@ from ..config import THEME
 from ..ui import theme as T
 
 _VIEW_TO_KEY = {"dispersion": "dispersion", "trend": "trend",
-                "multi_trend": "multi_trend", "regression": "regression"}
+                "multi_trend": "multi_trend"}
 
 
 def _fmt(v) -> str:
@@ -76,8 +76,7 @@ def register(app: Dash) -> None:
         prevent_initial_call=True,
     )
     def add_mark(_n, kind, x_val, y_val, label, active, marks):
-        marks = marks or {"dispersion": [], "trend": [], "multi_trend": [],
-                          "regression": []}
+        marks = marks or {"dispersion": [], "trend": [], "multi_trend": []}
         key = _VIEW_TO_KEY.get(active)
         if key is None:
             raise PreventUpdate
@@ -112,8 +111,7 @@ def register(app: Dash) -> None:
         prevent_initial_call=True,
     )
     def clear_marks(_n, active, marks):
-        marks = marks or {"dispersion": [], "trend": [], "multi_trend": [],
-                          "regression": []}
+        marks = marks or {"dispersion": [], "trend": [], "multi_trend": []}
         key = _VIEW_TO_KEY.get(active)
         if key is None:
             raise PreventUpdate

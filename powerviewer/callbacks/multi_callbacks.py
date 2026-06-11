@@ -18,12 +18,27 @@ from ..graphs import multi_trend
 from ..ui.cards import render_series_chips
 
 PREFIX = "mt"
+# Operator -> display symbol for combined-line names/badges.
+_OP_SYM = {"+": "+", "-": "−", "*": "×", "/": "÷"}
 
 
 def _find(series, sid):
     for s in series:
         if s["id"] == sid:
             return s
+    return None
+
+
+def _zoom_xrange(relayout):
+    """Current X zoom window from relayoutData, or None (full range / reset)."""
+    if not relayout or relayout.get("xaxis.autorange"):
+        return None
+    r0, r1 = relayout.get("xaxis.range[0]"), relayout.get("xaxis.range[1]")
+    if r0 is not None and r1 is not None:
+        return (r0, r1)
+    rng = relayout.get("xaxis.range")
+    if isinstance(rng, (list, tuple)) and len(rng) == 2:
+        return (rng[0], rng[1])
     return None
 
 
@@ -35,24 +50,30 @@ def register(app: Dash) -> None:
         Input("multi-store", "data"),
         Input("marks-store", "data"),
         Input("labels-store", "data"),
+        # In scatter mode the per-curve regression refits to the zoomed window,
+        # so we read the graph's relayoutData (the X range) as an input.
+        Input("multi-graph", "relayoutData"),
         State("current-file", "data"),
         State("current-table", "data"),
     )
-    def render(store, marks, labels, filename, table):
+    def render(store, marks, labels, relayout, filename, table):
         store = store or {}
         series = store.get("series") or []
         cfg = store.get("axis_cfg") or {}
+        style = store.get("style", "lines")
         df = load_dataframe(filename, table) if filename else None
+        value_range = _zoom_xrange(relayout) if style == "scatter" else None
         fig = multi_trend.build_figure(
             df, store.get("x"), series,
             marks=(marks or {}).get("multi_trend"),
             labels=(labels or {}).get("multi_trend"),
-            axis_cfg=cfg)
-        # uirevision keys the preserved view. Include axis_cfg so toggling
-        # shared-zero / editing a manual range actually re-applies the new axis
-        # ranges (otherwise Plotly keeps the previous view and ignores them).
+            axis_cfg=cfg, style=style, value_range=value_range)
+        # uirevision keys the preserved view. Include axis_cfg + style so toggling
+        # shared-zero / line↔scatter actually re-applies the figure (otherwise
+        # Plotly keeps the previous view and ignores the new ranges/markers).
         rev = "|".join(s["id"] for s in series) or "empty"
-        rev += "::" + repr(sorted((k, str(v)) for k, v in cfg.items()))
+        rev += "::" + style + "::" + repr(sorted((k, str(v))
+                                                  for k, v in cfg.items()))
         fig.update_layout(uirevision=rev)
         return fig
 
@@ -63,8 +84,51 @@ def register(app: Dash) -> None:
         Input("chip-open", "data"),
     )
     def chips(store, open_id):
-        return render_series_chips((store or {}).get("series") or [], PREFIX,
-                                   allow_axis=True, open_id=open_id)
+        store = store or {}
+        return render_series_chips(store.get("series") or [], PREFIX,
+                                   allow_axis=True, open_id=open_id,
+                                   scatter=store.get("style") == "scatter")
+
+    # --- Line ↔ scatter display mode --------------------------------------- #
+    @app.callback(
+        Output("multi-store", "data", allow_duplicate=True),
+        Input("multi-style", "value"),
+        State("multi-store", "data"),
+        prevent_initial_call=True,
+    )
+    def set_style(style, store):
+        store = dict(store or {})
+        if store.get("style") == style:
+            raise PreventUpdate
+        store["style"] = style if style in ("lines", "scatter") else "lines"
+        return store
+
+    # --- Per-curve regression: toggle + colour + equation-box corner -------- #
+    @app.callback(
+        Output("multi-store", "data", allow_duplicate=True),
+        Input({"type": f"{PREFIX}-fit", "index": ALL}, "value"),
+        Input({"type": f"{PREFIX}-fit-color", "index": ALL}, "value"),
+        Input({"type": f"{PREFIX}-fit-pos", "index": ALL}, "value"),
+        State("multi-store", "data"),
+        prevent_initial_call=True,
+    )
+    def edit_fit(fits, colors, positions, store):
+        if not ctx.triggered:
+            raise PreventUpdate
+        store = dict(store or {})
+        original = store.get("series") or []
+        series = [dict(s) for s in original]
+        for i, s in enumerate(series):
+            if i < len(fits):
+                s["fit"] = bool(fits[i])
+            if i < len(colors) and colors[i]:
+                s["fit_color"] = colors[i]
+            if i < len(positions) and positions[i]:
+                s["fit_pos"] = positions[i]
+        if series == original:   # re-render re-fires inputs; bail if unchanged
+            raise PreventUpdate
+        store["series"] = series
+        return store
 
     # --- Edit name / colour / scale / displace / axis ---------------------- #
     @app.callback(
@@ -121,17 +185,19 @@ def register(app: Dash) -> None:
                                        else [])
         if not srcs:
             raise PreventUpdate
+        op = base.get("op", "+")
         label = "d/dx" if kind == "derivative" else "∫"
-        inner = " + ".join(srcs)
+        inner = f" {_OP_SYM[op]} ".join(srcs)
         new = {"id": uuid.uuid4().hex[:8], "transform": kind,
                "name": f"{label}({inner})", "color": palette_color(len(series)),
                "scale": 1.0, "displace": 0.0}
         # Keep single-source curves on "source" (so the var panel highlights),
-        # multi-source (sum) curves on "sources".
+        # multi-source (combined) curves on "sources" + their operator.
         if len(srcs) == 1:
             new["source"] = srcs[0]
         else:
             new["sources"] = srcs
+            new["op"] = op
         series.append(new)
         store["series"] = series
         return store
@@ -211,18 +277,21 @@ def register(app: Dash) -> None:
         Output("multi-store", "data", allow_duplicate=True),
         Input("multi-sum-add", "n_clicks"),
         State("multi-sum-a", "value"),
+        State("multi-op", "value"),
         State("multi-sum-b", "value"),
         State("multi-store", "data"),
         prevent_initial_call=True,
     )
-    def add_sum(_n, col_a, col_b, store):
+    def add_sum(_n, col_a, op, col_b, store):
         if not col_a or not col_b:
             raise PreventUpdate
+        op = op if op in ("+", "-", "*", "/") else "+"
         store = dict(store or {})
         series = list(store.get("series") or [])
         sources = [col_a, col_b]
         series.append({"id": uuid.uuid4().hex[:8], "sources": sources,
-                       "transform": "none", "name": " + ".join(sources),
+                       "op": op, "transform": "none",
+                       "name": f"{col_a} {_OP_SYM[op]} {col_b}",
                        "color": palette_color(len(series)), "scale": 1.0,
                        "displace": 0.0})
         store["series"] = series

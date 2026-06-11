@@ -52,11 +52,10 @@ header dropdown the front end updates to show that file's variables.
     ├── graphs/                 # ONE module per viewer — fully decoupled
     │   ├── base.py             # shared: styling, marks, labels, screenshots
     │   ├── transforms.py       # shared derivative / cumulative-integral maths
-    │   ├── series_figure.py    # shared series-list builder (both trend viewers)
+    │   ├── series_figure.py    # shared builder: series list, scatter, regression
     │   ├── dispersion_1d.py    # viewer 1
     │   ├── trend.py            # viewer 2 (thin wrapper over series_figure)
-    │   ├── multi_trend.py      # viewer 3 (thin wrapper over series_figure)
-    │   ├── regression.py       # viewer 4 (scatter + least-squares fit)
+    │   ├── multi_trend.py      # viewer 3 (lines/scatter + per-curve regression)
     │   └── __init__.py
     ├── ui/
     │   ├── theme.py            # style dictionaries (built from config.THEME)
@@ -71,8 +70,7 @@ header dropdown the front end updates to show that file's variables.
         ├── variables.py        # right-hand variable list + click selection
         ├── dispersion_callbacks.py
         ├── trend_callbacks.py
-        ├── multi_callbacks.py
-        ├── regression_callbacks.py
+        ├── multi_callbacks.py  # series + line/scatter mode + per-curve regression
         ├── marks_callbacks.py  # shared add/list/delete marks
         └── __init__.py         # register_all(app)
 ```
@@ -99,7 +97,7 @@ The core design rule is that **viewers do not know about each other**.
 
 ```
 ┌────────────────────────────────────────────────────┐
-│ header   ☰ | title | file chooser | ...... | 📷 right │
+│ header  ☰|title|file chooser|..|graph-title|📷 right │
 ├────────────────────────────────────────────────────┤
 │ ribbon   ✎ Edit Labels · ⇄ Adjust Axes · ⚐ Marks · ⚙ View │
 ├──────────────────────────────────────┬─────────────┤
@@ -109,6 +107,11 @@ The core design rule is that **viewers do not know about each other**.
 │ chips   ● series-a   ● series-b   …  (→ options pop) │
 └────────────────────────────────────────────────────┘
 ```
+
+The header carries a **quick graph-title input** (`header-title`) just left of the
+📷 Screenshot button; it is two-way mirrored with the **Edit Labels** title (both
+write `labels-store[active]["title"]`; `labels_callbacks.populate` fills both, and
+`save_labels` has an equality guard so the mirror can't loop).
 
 The UI is split into a **top options ribbon** and a **bottom chip bar** that
 frame the graph (`gridTemplateAreas` rows `header / ribbon / graph+vars / chips`).
@@ -126,12 +129,18 @@ open at a time (`ribbon-open` store), and switching viewer closes it.
   Trend), stored in `labels-store` (`callbacks/labels_callbacks.py`).
 - **⇄ Adjust Axes** — Multiple-Trend only (hidden for the others): **shared-zero**
   alignment + manual **Left/Right min/max** ranges.
+- **Σ Combine** — Multiple-Trend only: build a derived line from two existing
+  source columns with an **operator** (`+` / `−` / `×` / `÷`, `multi-op`). The new
+  series carries `sources=[a, b]` + `op`; `series_figure._combine` applies it
+  (÷ guards /0 → NaN). Its chip badge shows the operator symbol.
 - **⚐ Marks** — the horizontal type → value → (y) → label → [+] controls + the
   pill history (`callbacks/marks_callbacks.py`).
 - **⚙ View** — the active viewer's own controls (label changes per viewer:
-  *Distribution* / *Trend* / *Add Sum* / *Regression*); the four per-viewer option
-  divs (`dispersion-options` … `regression-options`) live inside and are toggled
-  by `data_callbacks.toggle_visibility`.
+  *Distribution* / *Trend* / *Display*); the three per-viewer option divs
+  (`dispersion-options` / `trend-options` / `multi-options`) live inside and are
+  toggled by `data_callbacks.toggle_visibility`. The Multiple-Trend *Display*
+  popover holds just the **Lines ↔ Scatter** mode radio (`multi-style`); the
+  *Combine* builder is its own ribbon button (above).
 
 **Bottom chip bar** (`ui/layout._chip_bar`, renderer `ui/cards.py`): one **chip
 per series drawn in the graph** — a colour dot + name (+ an **L/R axis badge** for
@@ -139,18 +148,22 @@ Multiple Trend). Clicking a chip raises a **popover *above* it** (`chip-open`
 store) with that series' options. The options shown are tailored per viewer:
 - **1D Dispersion** — colour + rename only (least, as requested);
 - **Trend** — colour, rename, scale, displacement, **+d/dx**, **+∫**, remove;
-- **Multiple Trend** — the Trend set **plus an Axis (Y ◀ / Y ▶) selector**;
-- **Scatter + Regression** — the Trend set **without** derivative/integral.
+- **Multiple Trend** — the Trend set **plus an Axis (Y ◀ / Y ▶) selector** and a
+  **per-curve Regression** block (line toggle + **fit colour** + equation-box
+  corner), *greyed out until the graph is in Scatter mode*.
 
+The popover is laid out in compact horizontal rows: **name** on top (no label),
+then **colour + axis**, then **scale + displacement + d/dx + ∫**, then the
+**regression** row, with **Remove** at the bottom (see `ui/cards._series_menu`).
 The series cards' inputs keep their original pattern-matching IDs
-(`{tr,mt}-name/-color/-scale/-displace/-axis/-add-d/-add-i/-del`), and *every*
-series' inputs are rendered (only the open chip's popover is visible), so the
-ALL-pattern Trend/Multiple-Trend callbacks are unchanged. Dispersion's and
-Regression's chip rename inputs reuse `{"type":"series-name","index":col}` so the
+(`{tr,mt}-name/-color/-scale/-displace/-axis/-add-d/-add-i/-del`, plus
+`mt-fit/-fit-color/-fit-pos`), and *every* series' inputs are rendered (only the open chip's
+popover is visible), so the ALL-pattern Trend/Multiple-Trend callbacks are
+unchanged. Dispersion's chip rename input reuses `{"type":"series-name","index":col}` so the
 shared `labels_callbacks.save_legend` still applies them. The variables panel on
 the right is intentionally narrow (15% slimmer than default).
 
-## The Four Viewers
+## The Three Viewers
 
 ### 1. 1D Dispersion (`graphs/dispersion_1d.py`)
 - Takes **one** variable. Values spread along **X**; the vertical axis lifts the
@@ -211,13 +224,13 @@ respected. Switch `_NS_PER_UNIT` to `1e9` for seconds.
 ### 3. Multiple Trend (`graphs/multi_trend.py`)
 - **One X**, **any number of Y** source variables, each adding a raw series; add
   derivative/integral series on top of any of them.
-- **Sum of two lines**: the *Sum two lines* control (two dropdowns + **Add sum**)
-  creates a new series whose value is the row-wise **sum of two source columns**.
-  Such a series carries `sources=[a, b]` (instead of a single `source`); the
-  shared builder sums those columns, then applies transform → scale → displace,
-  so you can also take the derivative/integral of a sum. Sum chips show a **Σ**
-  badge. The *Sum two lines* control lives in the **View** popover. (Sum is
-  Multiple-Trend only.)
+- **Combine two lines**: the **Σ Combine** ribbon popover (two dropdowns + an
+  **operator** `+ − × ÷` + **Add combined line**) creates a new series whose value
+  is the row-wise combination of two source columns. Such a series carries
+  `sources=[a, b]` + `op`; `series_figure._combine` applies the operator (then
+  transform → scale → displace), so you can also take the derivative/integral of a
+  combined line. Combined chips show the **operator symbol** as their badge.
+  (Multiple-Trend only.)
 - **Two Y axes**: each chip popover has a **Y ◀ / Y ▶** selector assigning its
   series to the left (primary) or right (secondary) axis, so trends with very
   different scales are both readable. Each axis auto-fits independently. Series
@@ -231,25 +244,25 @@ respected. Switch `_NS_PER_UNIT` to `1e9` for seconds.
   (shown only here), stored in `labels-store[...]["yaxis2"]`.
 - Default colours come from `config.ORANGE_PALETTE` (recolourable per chip).
 - The **Y axis auto-fits dynamically** to the highest/lowest *displayed* values.
-- Adding/removing a series **restarts the view** (figure `uirevision` keyed to
-  the series ids) to avoid stale-zoom bugs.
-
-### 4. Scatter + Regression (`graphs/regression.py`)
-- Exactly **one X** and **one Y** source (first click X, second Y; **Swap** in the
-  View popover), like Trend — but points are drawn as a **scatter, not
-  connected**.
-- The Y series' **colour**, **rename**, **scale** and **displacement** are edited
-  from its **chip popover** (no derivative/integral — those don't apply). Y is
-  transformed as `y·scale + displace` before fitting, so the equation reflects
-  what's drawn (`regression-store` carries `color/scale/displace`).
-- A toggleable **least-squares regression** line (`numpy.polyfit` deg 1) shows the
-  best line minimising squared error. Its **equation** (`y = m·x + b`) and **R²**
-  appear in a box **on the graph, not in the legend**; an *Equation box* dropdown
-  (View popover) moves it between the four corners.
-- The fit is **zoom-aware**: the render callback reads the graph's `relayoutData`
-  and refits using only the points inside the visible window (X and, for a box
-  zoom, Y), then pins the view. Double-click to reset.
-- Marks and labels work as usual.
+- **Lines ↔ Scatter** (the **Display** = ⚙ View popover, `multi-style`): switches
+  *all* curves between connected lines and unconnected points. The mode lives in
+  `multi-store["style"]`.
+- **Per-curve regression** (merged in from the former standalone viewer): in
+  **Scatter** mode each chip exposes a **Regression line** toggle (`mt-fit`), a
+  **fit colour** (`mt-fit-color`, defaults to the curve's colour) and an
+  **Equation box** corner dropdown (`mt-fit-pos`); all **greyed out in Lines
+  mode**. An enabled curve gets its own **least-squares** fit (`numpy.polyfit`
+  deg 1) drawn **on that curve's own Y axis**, in the fit colour, as
+  `lines+markers` so the predicted value at each sample is readable. Its
+  **equation + R²** show in an on-graph box (not the legend) at the chosen corner,
+  coloured to match; boxes sharing a corner are **stacked** (vertical `yshift`).
+  The fit is **zoom-aware**: `multi_callbacks.render` reads the graph's
+  `relayoutData` and passes the visible X window as `value_range`, so the
+  regression recomputes for the section you zoom into.
+- Adding/removing a series **restarts the view** (figure `uirevision`, which is
+  keyed to the **series ids + style + axis_cfg**) so toggling line/scatter,
+  shared-zero or a manual range actually re-applies the new figure instead of
+  Plotly preserving the stale view.
 
 ## Common Capabilities (all viewers)
 

@@ -25,8 +25,16 @@ def build_figure(
     marks: Optional[list] = None,
     labels: Optional[dict] = None,
     axis_cfg: Optional[dict] = None,
+    style: str = "lines",
+    value_range: Optional[tuple] = None,
 ) -> go.Figure:
-    """Build the multi-line trend figure from *series*."""
+    """Build the multi-line trend figure from *series*.
+
+    ``style`` switches all curves between connected ``"lines"`` and unconnected
+    ``"scatter"`` markers; in scatter mode a series may carry ``fit=True`` to
+    overlay its own least-squares regression (recomputed over the zoomed window
+    given by ``value_range``).
+    """
     from .base import empty_figure
     if df is None or not x_col or not series:
         return empty_figure(
@@ -38,4 +46,5 @@ def build_figure(
         title=f"Multiple Trend vs {x_col}",
         empty_msg=f"No numeric data to plot against '{x_col}'.",
         marks=marks, labels=labels, axis_cfg=axis_cfg,
+        style=style, value_range=value_range,
     )

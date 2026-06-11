@@ -16,7 +16,6 @@ from . import (
     dispersion_callbacks,
     trend_callbacks,
     multi_callbacks,
-    regression_callbacks,
     marks_callbacks,
 )
 
@@ -31,5 +30,4 @@ def register_all(app: Dash) -> None:
     dispersion_callbacks.register(app)
     trend_callbacks.register(app)
     multi_callbacks.register(app)
-    regression_callbacks.register(app)
     marks_callbacks.register(app)
