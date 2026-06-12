@@ -72,16 +72,8 @@ VIEWERS = [
                 "fits (uniform / normal / log-normal / exponential).",
     },
     {
-        "key": "trend",
-        "label": "Trend",
-        "icon": "↗",  # ↗
-        "help": "Pick TWO variables. First click = X axis, second click = Y "
-                "axis. Use Swap to exchange them. Drag horizontally to zoom X, "
-                "vertically to zoom Y.",
-    },
-    {
         "key": "multi_trend",
-        "label": "Multiple Trend",
+        "label": "Trends",
         "icon": "≡",  # ≡
         "help": "Pick ONE X variable, then any number of Y variables. Each "
                 "line gets an orange tone you can recolour and a scale factor; "

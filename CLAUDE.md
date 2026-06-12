@@ -53,9 +53,9 @@ header dropdown the front end updates to show that file's variables.
     │   ├── base.py             # shared: styling, marks, labels, screenshots
     │   ├── transforms.py       # shared derivative / cumulative-integral maths
     │   ├── series_figure.py    # shared builder: series list, scatter, regression
-    │   ├── dispersion_1d.py    # viewer 1
-    │   ├── trend.py            # viewer 2 (thin wrapper over series_figure)
-    │   ├── multi_trend.py      # viewer 3 (lines/scatter + per-curve regression)
+    │   ├── report.py           # DECOUPLED report-only ops (break-to-zero; future stats)
+    │   ├── dispersion_1d.py    # viewer 1 (1D Dispersion)
+    │   ├── multi_trend.py      # viewer 2 (Trends: lines/scatter + regression)
     │   └── __init__.py
     ├── ui/
     │   ├── theme.py            # style dictionaries (built from config.THEME)
@@ -69,9 +69,9 @@ header dropdown the front end updates to show that file's variables.
         ├── labels_callbacks.py # title/axis editing + legend (series) renames
         ├── variables.py        # right-hand variable list + click selection
         ├── dispersion_callbacks.py
-        ├── trend_callbacks.py
         ├── multi_callbacks.py  # series + line/scatter mode + per-curve regression
         ├── marks_callbacks.py  # shared add/list/delete marks
+        ├── report_callbacks.py # DECOUPLED report tool: Break-to-zero wiring
         └── __init__.py         # register_all(app)
 ```
 
@@ -97,7 +97,7 @@ The core design rule is that **viewers do not know about each other**.
 
 ```
 ┌────────────────────────────────────────────────────┐
-│ header  ☰|title|file chooser|..|graph-title|📷 right │
+│ header  ☰|title|file chooser|..|shot-name|📷 right   │
 ├────────────────────────────────────────────────────┤
 │ ribbon   ✎ Edit Labels · ⇄ Adjust Axes · ⚐ Marks · ⚙ View │
 ├──────────────────────────────────────┬─────────────┤
@@ -108,10 +108,10 @@ The core design rule is that **viewers do not know about each other**.
 └────────────────────────────────────────────────────┘
 ```
 
-The header carries a **quick graph-title input** (`header-title`) just left of the
-📷 Screenshot button; it is two-way mirrored with the **Edit Labels** title (both
-write `labels-store[active]["title"]`; `labels_callbacks.populate` fills both, and
-`save_labels` has an equality guard so the mirror can't loop).
+The header has a **screenshot-name input** (`screenshot-name`) just left of the
+📷 Screenshot button: typing a name saves the PNG as `<name>.png` (sanitised by
+`base._safe_stem`); blank falls back to `<viewer>_<timestamp>.png`. It does **not**
+change the graph title (the title is edited only in the Edit Labels popover).
 
 The UI is split into a **top options ribbon** and a **bottom chip bar** that
 frame the graph (`gridTemplateAreas` rows `header / ribbon / graph+vars / chips`).
@@ -125,45 +125,59 @@ the viewers to pick from and, at its **bottom**, shows the selected graph's
 **Top ribbon** (`ui/layout._ribbon`, wiring in `callbacks/ribbon_callbacks.py`):
 each button toggles one floating **popover** anchored beneath it; only one is
 open at a time (`ribbon-open` store), and switching viewer closes it.
-- **✎ Edit Labels** — title + X/Y axis titles (+ **Y-right** title for Multiple
-  Trend), stored in `labels-store` (`callbacks/labels_callbacks.py`).
-- **⇄ Adjust Axes** — Multiple-Trend only (hidden for the others): **shared-zero**
+- **✎ Edit Labels** — title + X/Y axis titles (+ **Y-right** title for Trends) +
+  the **Legend box** position (`label-legend-pos` → `labels-store[...]["legend_pos"]`:
+  `tl`/`tr`/`bl`/`br` put the legend in that in-plot corner as a bordered box,
+  `out` floats it outside on the right). Applied in `base.apply_labels`.
+- **⇄ Adjust Axes** — Trends only (hidden for Dispersion): **shared-zero**
   alignment + manual **Left/Right min/max** ranges.
-- **Σ Combine** — Multiple-Trend only: build a derived line from two existing
-  source columns with an **operator** (`+` / `−` / `×` / `÷`, `multi-op`). The new
-  series carries `sources=[a, b]` + `op`; `series_figure._combine` applies it
+- **Σ Combine** — Trends only: build a derived line from two existing source
+  columns with an **operator** (`+` / `−` / `×` / `÷`, `multi-op`). The new series
+  carries `sources=[a, b]` + `op`; `series_figure._combine` applies it
   (÷ guards /0 → NaN). Its chip badge shows the operator symbol.
+- **⌁ Break** — Trends only, **report tool**: pick a line + a **break time** (an
+  X instant, `YYYY-MM-DD HH:MM`, day-first) and re-shape its discharge half to
+  deplete to zero (energy report). Sets `break_time` on the chosen series in
+  `multi-store`; the maths lives in the decoupled `graphs/report.break_to_zero`
+  and is applied by `series_figure.build` (charge half before the time is kept;
+  the discharge half from that time on → `last - y`, so it inverts and ends at
+  `Y = 0`). Wiring in `callbacks/report_callbacks.py`. **Clear** removes all
+  breaks. This view is report-only and kept separate from the analysis viewers.
 - **⚐ Marks** — the horizontal type → value → (y) → label → [+] controls + the
-  pill history (`callbacks/marks_callbacks.py`).
+  pill history (`callbacks/marks_callbacks.py`). The value box's **placeholder
+  hints the format** per type (a vertical/point mark on a time axis takes
+  `YYYY-MM-DD HH:MM`, parsed day-first; numbers also work).
 - **⚙ View** — the active viewer's own controls (label changes per viewer:
-  *Distribution* / *Trend* / *Display*); the three per-viewer option divs
-  (`dispersion-options` / `trend-options` / `multi-options`) live inside and are
-  toggled by `data_callbacks.toggle_visibility`. The Multiple-Trend *Display*
-  popover holds just the **Lines ↔ Scatter** mode radio (`multi-style`); the
-  *Combine* builder is its own ribbon button (above).
+  *Distribution* / *Display*); the two per-viewer option divs
+  (`dispersion-options` / `multi-options`) live inside and are toggled by
+  `data_callbacks.toggle_visibility`. The Trends *Display* popover holds just the
+  **Lines ↔ Scatter** mode radio (`multi-style`); the *Combine* builder is its own
+  ribbon button (above).
 
 **Bottom chip bar** (`ui/layout._chip_bar`, renderer `ui/cards.py`): one **chip
 per series drawn in the graph** — a colour dot + name (+ an **L/R axis badge** for
-Multiple Trend). Clicking a chip raises a **popover *above* it** (`chip-open`
-store) with that series' options. The options shown are tailored per viewer:
+Trends). Clicking a chip raises a **popover *above* it** (`chip-open` store) with
+that series' options. The options shown are tailored per viewer:
 - **1D Dispersion** — colour + rename only (least, as requested);
-- **Trend** — colour, rename, scale, displacement, **+d/dx**, **+∫**, remove;
-- **Multiple Trend** — the Trend set **plus an Axis (Y ◀ / Y ▶) selector** and a
-  **per-curve Regression** block (line toggle + **fit colour** + equation-box
-  corner), *greyed out until the graph is in Scatter mode*.
+- **Trends** — colour + name; axis (Y ◀ / Y ▶) + scale + displacement; **+d/dx**
+  + integral (with a trapezoid/front/back **rule**) + **+∫**; and a **per-curve
+  Regression** block (line toggle + **fit colour** + equation-box corner) *greyed
+  out until the graph is in Scatter mode*, then Remove.
 
-The popover is laid out in compact horizontal rows: **name** on top (no label),
-then **colour + axis**, then **scale + displacement + d/dx + ∫**, then the
-**regression** row, with **Remove** at the bottom (see `ui/cards._series_menu`).
+The popover is laid out in compact horizontal rows (see `ui/cards._series_menu`):
+**row 1** = a compact colour swatch (square + arrow, *no* label/hex) + the name
+input; **row 2** = axis + scale + displacement; **row 3** = **+ d/dx** and the
+integral (an **integral-rule** dropdown — Trapezoid / Front rect. / Back rect. —
+plus **+ ∫**); then the **regression** row; **Remove** at the bottom.
 The series cards' inputs keep their original pattern-matching IDs
-(`{tr,mt}-name/-color/-scale/-displace/-axis/-add-d/-add-i/-del`, plus
+(`mt-name/-color/-scale/-displace/-axis/-add-d/-add-i/-del`, plus
 `mt-fit/-fit-color/-fit-pos`), and *every* series' inputs are rendered (only the open chip's
-popover is visible), so the ALL-pattern Trend/Multiple-Trend callbacks are
-unchanged. Dispersion's chip rename input reuses `{"type":"series-name","index":col}` so the
+popover is visible), so the ALL-pattern Trends callbacks are unchanged.
+Dispersion's chip rename input reuses `{"type":"series-name","index":col}` so the
 shared `labels_callbacks.save_legend` still applies them. The variables panel on
 the right is intentionally narrow (15% slimmer than default).
 
-## The Three Viewers
+## The Two Viewers
 
 ### 1. 1D Dispersion (`graphs/dispersion_1d.py`)
 - Takes **one** variable. Values spread along **X**; the vertical axis lifts the
@@ -192,36 +206,32 @@ the right is intentionally narrow (15% slimmer than default).
 - Selection is **exclusive**: choosing one variable blocks the others until it
   is deselected (enforced in `callbacks/variables.py`).
 
-### Series model (shared by both Trend viewers)
+### Series model (Trends)
 
-Both trend viewers draw a **list of series** (`graphs/series_figure.py`). A series
+The Trends viewer draws a **list of series** (`graphs/series_figure.py`). A series
 is `{id, source|sources, transform, name, color, scale, displace, axis}` where
 `transform` is `none` / `derivative` / `integral`. So a derivative or integral is
 **just another series over the same source column** — Raw + d/dx + ∫ can all be
 shown at once, each as its own **chip** in the bottom bar whose popover holds an
 **editable name**, **colour**, **scale** and **displacement** (chips rendered by
-`ui/cards.render_series_chips`, namespaced `tr`/`mt`). Per series, maths is
-applied in the order *transform → scale → displacement*. Each chip popover has
-**+ d/dx**, **+ ∫** (add a derivative/integral of that chip's source as a
-brand-new series) and **Remove series**. The integral's total value is shown in
-its legend entry. Clearing a scale/displacement box keeps the previous value
-(identity fallback scale 1, displacement 0).
+`ui/cards.render_series_chips`, namespaced `mt`). Per series, maths is applied in
+the order *transform → scale → displacement*. Each chip popover has **+ d/dx**,
+**+ ∫** (add a derivative/integral of that chip's source as a brand-new series)
+and **Remove series**. The legend shows just the series **name** (the integral's
+running total is computed but **not** appended). Clearing a scale/displacement box
+keeps the previous value (identity fallback scale 1, displacement 0).
 
 **Time-aware maths** (`graphs/transforms.py`): derivative and integral integrate
-against the **real timestamps**. For a datetime X axis, time is measured in
-**elapsed hours** (NaT-safe), so e.g. the integral of power (kW) is energy
-(kW·h) and the derivative is a per-hour rate; non-uniform sample spacing is
-respected. Switch `_NS_PER_UNIT` to `1e9` for seconds.
+against the **real timestamps**, measured in **elapsed hours** (NaT-safe), so
+minute-resolution data contributes `y · (1/60)` per step — power integrates
+straight to energy and the derivative is a per-hour rate (no MW/MWh labels are
+added). Non-uniform spacing is respected. The integral takes a **rule**
+(`apply_transform(..., method=)`): `"trapezoid"` (default), `"front"`
+(left/forward rectangles) or `"back"` (right/backward rectangles), chosen per
+series via the chip's integral-rule dropdown (`mt-int-method`, stored as
+`integral_method`). Switch `_NS_PER_UNIT` to `1e9` for seconds.
 
-### 2. Trend (`graphs/trend.py`)
-- Exactly **one X** and **one Y** source. **First** click → X, **second** → Y;
-  the **Swap** button exchanges them. With both set, other variables are blocked.
-- The single Y starts as a raw series; add its **derivative / integral** on top
-  via the chip popover's **+ d/dx** / **+ ∫** buttons (all coexist).
-- **Axis-wise zoom**: `dragmode="zoom"` so horizontal drag zooms X, vertical
-  zooms Y; spikes guide intent.
-
-### 3. Multiple Trend (`graphs/multi_trend.py`)
+### 2. Trends (`graphs/multi_trend.py`)
 - **One X**, **any number of Y** source variables, each adding a raw series; add
   derivative/integral series on top of any of them.
 - **Combine two lines**: the **Σ Combine** ribbon popover (two dropdowns + an
@@ -272,7 +282,8 @@ Implemented once in `graphs/base.py`:
   - In-browser snapshot button on the Plotly modebar (downloads).
   - **"📷 Screenshot"** button top-right in the header → captures the **active**
     viewer and writes a PNG into `2. Screenshots/` via Kaleido (server-side,
-    committed with the repo). Files are named `<viewer>_<YYYYMMDD_HHMMSS>.png`.
+    committed with the repo). Named from the header **screenshot-name** box, or
+    `<viewer>_<YYYYMMDD_HHMMSS>.png` when blank.
     The saved image reflects the **current zoom/pan**: Plotly keeps interactive
     zoom in the graph's `relayoutData` (not the `figure` prop), so
     `shell_callbacks._apply_view` copies those ranges onto the figure before
@@ -281,10 +292,12 @@ Implemented once in `graphs/base.py`:
   (y for point) → label → [+]**. Added marks appear as well-spaced **pills**
   (e.g. `H: nominal = 100`, `P: peak = (3, 5)`), each with a **✕ delete**, plus
   **Clear all**. Marks are stored **per viewer** in `marks-store`.
-- **Labels** — title and X/Y axis titles are editable per viewer from the **✎ Edit
-  Labels** ribbon popover; **legend (series) names** are edited from the bottom
-  **chip popovers**. All stored in `labels-store` and applied via
-  `graphs/base.apply_labels` / `series_name`.
+- **Labels** — title, X/Y axis titles and the **legend-box position** are editable
+  per viewer from the **✎ Edit Labels** ribbon popover; **legend (series) names**
+  are edited from the bottom **chip popovers**. All stored in `labels-store` and
+  applied via `graphs/base.apply_labels` / `series_name`. The **legend renders as a
+  box inside the plot** (top-right by default) and can be moved to any corner or
+  pushed outside.
 
 ## Data Format
 

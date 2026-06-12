@@ -74,6 +74,7 @@ def register(app: Dash) -> None:
         rev = "|".join(s["id"] for s in series) or "empty"
         rev += "::" + style + "::" + repr(sorted((k, str(v))
                                                   for k, v in cfg.items()))
+        rev += "::" + repr([s.get("break_time") for s in series])
         fig.update_layout(uirevision=rev)
         return fig
 
@@ -130,7 +131,7 @@ def register(app: Dash) -> None:
         store["series"] = series
         return store
 
-    # --- Edit name / colour / scale / displace / axis ---------------------- #
+    # --- Edit name / colour / scale / displace / axis / integral-rule ------ #
     @app.callback(
         Output("multi-store", "data", allow_duplicate=True),
         Input({"type": f"{PREFIX}-name", "index": ALL}, "value"),
@@ -138,10 +139,11 @@ def register(app: Dash) -> None:
         Input({"type": f"{PREFIX}-scale", "index": ALL}, "value"),
         Input({"type": f"{PREFIX}-displace", "index": ALL}, "value"),
         Input({"type": f"{PREFIX}-axis", "index": ALL}, "value"),
+        Input({"type": f"{PREFIX}-int-method", "index": ALL}, "value"),
         State("multi-store", "data"),
         prevent_initial_call=True,
     )
-    def edit(names, colors, scales, displaces, axes, store):
+    def edit(names, colors, scales, displaces, axes, methods, store):
         if not ctx.triggered:
             raise PreventUpdate
         store = dict(store or {})
@@ -158,6 +160,10 @@ def register(app: Dash) -> None:
             if i < len(displaces):
                 s["displace"] = float(displaces[i]) if displaces[i] not in (None, "") \
                     else s.get("displace", 0.0)
+            # Integral rule only matters for an integral series.
+            if (i < len(methods) and methods[i]
+                    and s.get("transform") == "integral"):
+                s["integral_method"] = methods[i]
             if i < len(axes) and axes[i] in ("left", "right"):
                 new_axis = axes[i]
                 if new_axis != s.get("axis", "left"):
@@ -174,7 +180,7 @@ def register(app: Dash) -> None:
         return store
 
     # --- Add derivative / integral of a series' source --------------------- #
-    def _add(kind, store):
+    def _add(kind, store, method="trapezoid"):
         trig = ctx.triggered_id
         if not trig or not ctx.triggered or not ctx.triggered[0]["value"]:
             raise PreventUpdate
@@ -191,6 +197,8 @@ def register(app: Dash) -> None:
         new = {"id": uuid.uuid4().hex[:8], "transform": kind,
                "name": f"{label}({inner})", "color": palette_color(len(series)),
                "scale": 1.0, "displace": 0.0}
+        if kind == "integral":
+            new["integral_method"] = method
         # Keep single-source curves on "source" (so the var panel highlights),
         # multi-source (combined) curves on "sources" + their operator.
         if len(srcs) == 1:
@@ -214,11 +222,20 @@ def register(app: Dash) -> None:
     @app.callback(
         Output("multi-store", "data", allow_duplicate=True),
         Input({"type": f"{PREFIX}-add-i", "index": ALL}, "n_clicks"),
+        State({"type": f"{PREFIX}-int-method", "index": ALL}, "value"),
         State("multi-store", "data"),
         prevent_initial_call=True,
     )
-    def add_integral(_c, store):
-        return _add("integral", store)
+    def add_integral(_c, _methods, store):
+        # Use the integration rule chosen on the *clicked* series' chip.
+        trig = ctx.triggered_id
+        method = "trapezoid"
+        if trig and ctx.states_list:
+            for st in ctx.states_list[0]:
+                if st.get("id", {}).get("index") == trig.get("index"):
+                    method = st.get("value") or "trapezoid"
+                    break
+        return _add("integral", store, method)
 
     # --- Delete a series --------------------------------------------------- #
     @app.callback(

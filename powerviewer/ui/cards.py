@@ -33,22 +33,28 @@ _NUM = {"width": "100%", "padding": "6px 8px", "borderRadius": "7px",
         "color": THEME["text"], "fontSize": "12px", "boxSizing": "border-box"}
 
 
-def swatch_option(c: str) -> dict:
-    """A colour-swatch option for a ``dcc.Dropdown`` (swatch + hex label)."""
-    return {"label": html.Div([
-        html.Span(style={"display": "inline-block", "width": "12px",
-                         "height": "12px", "borderRadius": "3px",
-                         "backgroundColor": c, "marginRight": "6px",
-                         "border": f"1px solid {THEME['border']}"}),
-        html.Span(c, style={"fontSize": "11px"})],
-        style={"display": "flex", "alignItems": "center"}), "value": c}
+def swatch_option(c: str, hex_label: bool = True) -> dict:
+    """A colour-swatch option for a ``dcc.Dropdown``.
+
+    With *hex_label* the label is "swatch + #hex"; without it the label is just
+    the colour square (used for the compact chip colour picker).
+    """
+    kids = [html.Span(style={"display": "inline-block", "width": "14px",
+                             "height": "14px", "borderRadius": "3px",
+                             "backgroundColor": c,
+                             "border": f"1px solid {THEME['border']}"})]
+    if hex_label:
+        kids[0].style["marginRight"] = "6px"
+        kids.append(html.Span(c, style={"fontSize": "11px"}))
+    return {"label": html.Div(kids, style={"display": "flex",
+                                           "alignItems": "center"}), "value": c}
 
 
-def color_options(current: str) -> list:
+def color_options(current: str, hex_label: bool = True) -> list:
     """Swatch options, ensuring *current* is selectable even if non-standard."""
     choices = (COLOR_CHOICES if current in COLOR_CHOICES
                else [current] + COLOR_CHOICES)
-    return [swatch_option(c) for c in choices]
+    return [swatch_option(c, hex_label) for c in choices]
 
 
 def field(label: str, control, grow: bool = True) -> html.Div:
@@ -109,27 +115,24 @@ def _series_menu(s: dict, prefix: str, allow_axis: bool, allow_transforms: bool,
     """Popover body for one series, laid out in compact horizontal rows."""
     sid = s["id"]
     current = s.get("color") or THEME["accent"]
-    kind = s.get("transform", "none")
-    is_sum = len(s.get("sources") or []) > 1
-    badge = (_OP_BADGE.get(s.get("op", "+"), "Σ") if (is_sum and kind == "none")
-             else _BADGE.get(kind, "raw"))
 
     body = []
-    # Row 1: name (rename) on its own line — no field label.
+    # Row 1: compact colour swatch (square + arrow, no label/hex) + name.
     body.append(html.Div([
-        html.Span(badge, style={**T.CHIP_BADGE, "flex": "0 0 auto"}),
+        html.Div(dcc.Dropdown(
+            id={"type": f"{prefix}-color", "index": sid},
+            options=color_options(current, hex_label=False), value=current,
+            clearable=False, searchable=False,
+            style={"color": "#111", "fontSize": "11px"}),
+            style={"flex": "0 0 auto", "width": "78px"}),
         dcc.Input(id={"type": f"{prefix}-name", "index": sid}, type="text",
                   value=s.get("name", ""), debounce=True, placeholder="name",
                   style={**_NUM, "flex": "1 1 0"}),
-    ], style={"display": "flex", "gap": "8px", "alignItems": "center",
+    ], style={"display": "flex", "gap": "10px", "alignItems": "center",
               "marginBottom": "12px"}))
 
-    # Row 2: colour + axis (axis only on Multiple Trend).
-    row2 = [field("Colour", dcc.Dropdown(
-        id={"type": f"{prefix}-color", "index": sid},
-        options=color_options(current), value=current,
-        clearable=False, searchable=False,
-        style={"color": "#111", "fontSize": "11px"}))]
+    # Row 2: axis (Trends only) + scale + displacement.
+    row2 = []
     if allow_axis:
         row2.append(field("Axis", dcc.Dropdown(
             id={"type": f"{prefix}-axis", "index": sid},
@@ -137,26 +140,35 @@ def _series_menu(s: dict, prefix: str, allow_axis: bool, allow_transforms: bool,
                      {"label": "Y ▶ right", "value": "right"}],
             value=s.get("axis", "left"), clearable=False, searchable=False,
             style={"color": "#111", "fontSize": "11px"})))
+    row2.append(field("Scale (×)", dcc.Input(
+        id={"type": f"{prefix}-scale", "index": sid}, type="number",
+        value=s.get("scale", 1.0), step="any", style=_NUM)))
+    row2.append(field("Displace (+)", dcc.Input(
+        id={"type": f"{prefix}-displace", "index": sid}, type="number",
+        value=s.get("displace", 0.0), step="any", style=_NUM)))
     body.append(html.Div(row2, style=_ROW))
 
-    # Row 3: scale + displacement + d/dx + ∫ (one line).
+    # Row 3: derivative + integral (the integral picks a rule: trapezoid /
+    # front-rectangle / back-rectangle).
     if allow_transforms:
         body.append(html.Div([
-            field("Scale (×)", dcc.Input(
-                id={"type": f"{prefix}-scale", "index": sid}, type="number",
-                value=s.get("scale", 1.0), step="any", style=_NUM)),
-            field("Displace (+)", dcc.Input(
-                id={"type": f"{prefix}-displace", "index": sid}, type="number",
-                value=s.get("displace", 0.0), step="any", style=_NUM)),
             html.Button("+ d/dx", id={"type": f"{prefix}-add-d", "index": sid},
                         n_clicks=0, title="Add derivative",
                         style={**T.CHIP_ACTION, "flex": "0 0 auto"}),
+            field("Integral rule", dcc.Dropdown(
+                id={"type": f"{prefix}-int-method", "index": sid},
+                options=[{"label": "Trapezoid", "value": "trapezoid"},
+                         {"label": "Front rect.", "value": "front"},
+                         {"label": "Back rect.", "value": "back"}],
+                value=s.get("integral_method", "trapezoid"),
+                clearable=False, searchable=False,
+                style={"color": "#111", "fontSize": "11px"})),
             html.Button("+ ∫", id={"type": f"{prefix}-add-i", "index": sid},
                         n_clicks=0, title="Add integral",
                         style={**T.CHIP_ACTION, "flex": "0 0 auto"}),
         ], style=_ROW))
 
-    # Row 4: per-curve regression (Multiple Trend only).
+    # Row 4: per-curve regression (Trends only).
     if allow_axis:
         body.append(_regression_row(s, prefix, scatter))
 

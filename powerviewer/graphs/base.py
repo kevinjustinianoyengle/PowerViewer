@@ -15,6 +15,16 @@ import plotly.graph_objects as go
 
 from ..config import PLOTLY_TEMPLATE, SCREENSHOT_DIR, THEME
 
+# Legend-box placement -> in-plot anchors (top/bottom × left/right), plus an
+# "out" option that puts it outside on the right.
+_LEGEND_POS = {
+    "tl": dict(x=0.01, y=0.99, xanchor="left", yanchor="top"),
+    "tr": dict(x=0.99, y=0.99, xanchor="right", yanchor="top"),
+    "bl": dict(x=0.01, y=0.01, xanchor="left", yanchor="bottom"),
+    "br": dict(x=0.99, y=0.01, xanchor="right", yanchor="bottom"),
+    "out": dict(x=1.02, y=1.0, xanchor="left", yanchor="top"),
+}
+
 
 def base_figure(title: str = "") -> go.Figure:
     """Return an empty figure with the shared PowerViewer styling applied."""
@@ -28,7 +38,12 @@ def base_figure(title: str = "") -> go.Figure:
         font=dict(color=THEME["text"]),
         margin=dict(l=60, r=24, t=48, b=48),
         hovermode="closest",
-        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color=THEME["text"])),
+        # Legend sits INSIDE the plot as a small box (top-right by default); its
+        # corner is user-selectable via Edit Labels (see apply_labels).
+        legend=dict(font=dict(color=THEME["text"]),
+                    bgcolor="rgba(246,248,250,0.85)",
+                    bordercolor=THEME["border"], borderwidth=1,
+                    **_LEGEND_POS["tr"]),
         uirevision="keep",  # preserve user zoom/pan across data-less updates
     )
     fig.update_xaxes(gridcolor=THEME["grid"], zerolinecolor=THEME["border"])
@@ -80,6 +95,18 @@ def apply_labels(fig: go.Figure, labels: Optional[Dict]) -> go.Figure:
         fig.layout.xaxis.title.text = labels["xaxis"]
     if labels.get("yaxis"):
         fig.layout.yaxis.title.text = labels["yaxis"]
+    pos = labels.get("legend_pos")
+    if pos in _LEGEND_POS:
+        # "out" floats outside on the right (no box); the rest are in-plot boxes.
+        if pos == "out":
+            fig.update_layout(legend=dict(
+                font=dict(color=THEME["text"]), bgcolor="rgba(0,0,0,0)",
+                bordercolor="rgba(0,0,0,0)", borderwidth=0, **_LEGEND_POS[pos]))
+        else:
+            fig.update_layout(legend=dict(
+                font=dict(color=THEME["text"]),
+                bgcolor="rgba(246,248,250,0.85)", bordercolor=THEME["border"],
+                borderwidth=1, **_LEGEND_POS[pos]))
     return fig
 
 
@@ -141,16 +168,25 @@ def apply_marks(fig: go.Figure, marks: Optional[List[Dict]]) -> go.Figure:
 # --------------------------------------------------------------------------- #
 # Screenshots saved server-side into the repository.
 # --------------------------------------------------------------------------- #
-def save_screenshot(fig: go.Figure, viewer_key: str,
+def _safe_stem(name: str) -> str:
+    """Sanitise a user-typed filename to a safe stem (no path / odd chars)."""
+    keep = [c if (c.isalnum() or c in " -_().") else "_" for c in name.strip()]
+    return "".join(keep).strip(" .")[:80]
+
+
+def save_screenshot(fig: go.Figure, viewer_key: str, name: Optional[str] = None,
                     width: int = 1400, height: int = 800,
                     scale: int = 2) -> Path:
     """Render *fig* to a PNG inside the screenshot folder and return its path.
 
-    Uses Plotly's kaleido backend (pure Python install) so the image is written
-    on the server and lives in the repo, instead of only downloading in-browser.
+    If *name* is given it is used (sanitised) as the file name; otherwise the
+    file is ``<viewer_key>_<timestamp>.png``. Uses Plotly's kaleido backend so the
+    image is written on the server and lives in the repo (not just downloaded).
     """
     SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_path = SCREENSHOT_DIR / f"{viewer_key}_{stamp}.png"
+    stem = _safe_stem(name) if name else ""
+    if not stem:
+        stem = f"{viewer_key}_{_dt.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    out_path = SCREENSHOT_DIR / f"{stem}.png"
     fig.write_image(str(out_path), width=width, height=height, scale=scale)
     return out_path

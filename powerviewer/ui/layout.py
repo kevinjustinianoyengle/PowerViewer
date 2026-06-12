@@ -70,10 +70,10 @@ def _header() -> html.Div:
         ),
         html.Button("⟳ Refresh", id="refresh-files", n_clicks=0, style=T.BUTTON),
         html.Span(id="data-status", style=T.STATUS),
-        # Quick graph-title editor for the active viewer (syncs with Edit Labels).
-        dcc.Input(id="header-title", type="text", debounce=True,
-                  placeholder="Graph title…",
-                  style={**T.SMALL_INPUT, "width": "180px",
+        # Names the saved PNG (blank -> <viewer>_<timestamp>); see shell_callbacks.
+        dcc.Input(id="screenshot-name", type="text", debounce=True,
+                  placeholder="Screenshot name…",
+                  style={**T.SMALL_INPUT, "width": "170px",
                          "marginLeft": "12px"}),
         html.Button("📷 Screenshot", id="save-screenshot", n_clicks=0,
                     style={**T.BUTTON_ACCENT, "marginLeft": "8px"}),
@@ -144,6 +144,16 @@ def _labels_popover() -> html.Div:
             dcc.Input(id="label-yaxis2", type="text", debounce=True,
                       placeholder="Y-right title", style=_FULL_INPUT),
             id="label-yaxis2-wrap", style={"display": "none"}),
+        html.Span("Legend box", style=T.POPOVER_TITLE),
+        dcc.Dropdown(
+            id="label-legend-pos",
+            options=[{"label": "Top-left", "value": "tl"},
+                     {"label": "Top-right", "value": "tr"},
+                     {"label": "Bottom-left", "value": "bl"},
+                     {"label": "Bottom-right", "value": "br"},
+                     {"label": "Outside (right)", "value": "out"}],
+            value="tr", clearable=False, searchable=False,
+            style={"color": "#111", "fontSize": "12px"}),
     ], style={"minWidth": "240px"})
 
 
@@ -233,15 +243,6 @@ def _dispersion_options() -> html.Div:
     ], style={"minWidth": "260px"})
 
 
-def _trend_options() -> html.Div:
-    return html.Div([
-        html.Button("⇄ Swap X / Y", id="trend-swap", n_clicks=0,
-                    style=T.BUTTON_ACCENT),
-        html.Div(id="trend-axes-label",
-                 style={**T.STATUS, "marginLeft": "0", "marginTop": "8px"}),
-    ], style={"minWidth": "220px"})
-
-
 def _multi_options() -> html.Div:
     """Multiple-Trend **Display** popover (the per-graph ⚙ View button)."""
     return html.Div([
@@ -281,12 +282,34 @@ def _combine_popover() -> html.Div:
     ], style={"minWidth": "300px"})
 
 
+def _break_popover() -> html.Div:
+    """Report **Break to zero** (Trends only): pick a line + a Y break value and
+    re-shape its discharge half to deplete to zero. Wired in report_callbacks."""
+    return html.Div([
+        html.P("Break to zero (energy report)", style=T.POPOVER_TITLE),
+        html.Span("Line", style=T.POPOVER_TITLE),
+        dcc.Dropdown(id="break-line", placeholder="choose a line…",
+                     clearable=False, searchable=False,
+                     style={"color": "#111", "fontSize": "12px",
+                            "marginBottom": "10px"}),
+        html.Span("Break time (X)", style=T.POPOVER_TITLE),
+        dcc.Input(id="break-time", type="text",
+                  placeholder="YYYY-MM-DD HH:MM", style=_FULL_INPUT),
+        html.Div([
+            html.Button("Apply break", id="break-apply", n_clicks=0,
+                        style=T.BUTTON_ACCENT),
+            html.Button("Clear", id="break-clear", n_clicks=0, style=T.BUTTON),
+        ], style={**T.POPOVER_FIELD_ROW, "marginTop": "10px"}),
+        html.Div(id="break-status",
+                 style={**T.CHIP_HINT, "marginTop": "8px"}),
+    ], style={"minWidth": "280px"})
+
+
 def _view_popover() -> html.Div:
     """The active viewer's own controls (only the active one is shown)."""
     return html.Div([
         html.Div(_dispersion_options(), id="dispersion-options",
                  style={"display": "block"}),
-        html.Div(_trend_options(), id="trend-options", style={"display": "none"}),
         html.Div(_multi_options(), id="multi-options", style={"display": "none"}),
     ])
 
@@ -297,9 +320,11 @@ def _ribbon() -> html.Div:
               _labels_popover()),
         _menu("axes", [html.Span("⇄"), html.Span("Adjust Axes")],
               _axes_popover(), wrap_id="ribbon-axes-menu"),
-        # Combine (Multiple-Trend only) — shown/hidden by ribbon_callbacks.chrome.
+        # Combine + Break (Trends only) — shown/hidden by ribbon_callbacks.chrome.
         _menu("combine", [html.Span("Σ"), html.Span("Combine")],
               _combine_popover(), wrap_id="ribbon-combine-menu"),
+        _menu("break", [html.Span("⌁"), html.Span("Break")],
+              _break_popover(), wrap_id="ribbon-break-menu"),
         html.Div(style=T.RIBBON_DIVIDER),
         _menu("marks", [html.Span("⚐"), html.Span("Marks")], _marks_popover()),
         _menu("view", [html.Span("⚙"), html.Span("View")], _view_popover()),
@@ -312,9 +337,6 @@ def _graph_area() -> html.Div:
                            config=GRAPH_CONFIG),
                  id="dispersion-graph-wrap",
                  style={"flex": "1", "minHeight": "0", "display": "block"}),
-        html.Div(dcc.Graph(id="trend-graph", style=T.GRAPH, config=GRAPH_CONFIG),
-                 id="trend-graph-wrap",
-                 style={"flex": "1", "minHeight": "0", "display": "none"}),
         html.Div(dcc.Graph(id="multi-graph", style=T.GRAPH, config=GRAPH_CONFIG),
                  id="multi-graph-wrap",
                  style={"flex": "1", "minHeight": "0", "display": "none"}),
@@ -340,7 +362,6 @@ def _chip_bar() -> html.Div:
               "flexWrap": "wrap"}
     return html.Div([
         html.Div(id="dispersion-chips", style=hidden),
-        html.Div(id="trend-chips", style=hidden),
         html.Div(id="multi-chips", style=hidden),
     ], style=T.CHIP_BAR)
 
@@ -357,15 +378,15 @@ def _stores() -> list:
         dcc.Store(id="columns-store", data=[]),
         dcc.Store(id="disp-store",
                   data={"col": None, "color": None, "fit_colors": {}}),
-        dcc.Store(id="trend-store", data={"x": None, "y": None, "series": []}),
         dcc.Store(id="multi-store",
                   data={"x": None, "series": [], "style": "lines",
                         "axis_cfg": {"share_zero": True}}),
         dcc.Store(id="marks-store",
-                  data={"dispersion": [], "trend": [], "multi_trend": []}),
+                  data={"dispersion": [], "multi_trend": []}),
         dcc.Store(id="labels-store",
                   data={k["key"]: {"title": "", "xaxis": "", "yaxis": "",
-                                   "series": {}} for k in VIEWERS}),
+                                   "legend_pos": "tr", "series": {}}
+                        for k in VIEWERS}),
     ]
 
 

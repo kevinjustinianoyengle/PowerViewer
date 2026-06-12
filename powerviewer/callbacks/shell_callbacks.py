@@ -14,7 +14,6 @@ _META = {v["key"]: v for v in VIEWERS}
 # active-view key -> (graph id holding the figure, screenshot file prefix)
 _GRAPH_OF = {
     "dispersion": ("dispersion-graph", "dispersion"),
-    "trend": ("trend-graph", "trend"),
     "multi_trend": ("multi-graph", "multi_trend"),
 }
 
@@ -92,24 +91,23 @@ def register(app: Dash) -> None:
         Input("save-screenshot", "n_clicks"),
         State("active-view", "data"),
         State("dispersion-graph", "figure"),
-        State("trend-graph", "figure"),
         State("multi-graph", "figure"),
         # User zoom/pan lives in relayoutData, NOT in the figure prop, so we must
         # read it to capture the current (zoomed) view rather than the full plot.
         State("dispersion-graph", "relayoutData"),
-        State("trend-graph", "relayoutData"),
         State("multi-graph", "relayoutData"),
+        # The header box names the saved PNG (falls back to <viewer>_<stamp>).
+        State("screenshot-name", "value"),
         prevent_initial_call=True,
     )
-    def screenshot(_n, active, disp_fig, trend_fig, multi_fig,
-                   disp_rl, trend_rl, multi_rl):
-        figs = {"dispersion": (disp_fig, disp_rl), "trend": (trend_fig, trend_rl),
+    def screenshot(_n, active, disp_fig, multi_fig, disp_rl, multi_rl, name):
+        figs = {"dispersion": (disp_fig, disp_rl),
                 "multi_trend": (multi_fig, multi_rl)}
         fig_dict, relayout = figs.get(active, (None, None))
         if not fig_dict:
             return "Nothing to capture yet."
         _, prefix = _GRAPH_OF[active]
         fig = _apply_view(go.Figure(fig_dict), relayout)
-        path = save_screenshot(fig, prefix)
+        path = save_screenshot(fig, prefix, name=name)
         zoomed = " (zoomed view)" if _has_zoom(relayout) else ""
         return f"📷 Saved screenshot{zoomed} → {path.name}"

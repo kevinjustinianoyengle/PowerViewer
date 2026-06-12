@@ -21,7 +21,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from ..config import THEME
-from . import transforms
+from . import report, transforms
 from .base import apply_labels, apply_marks, base_figure, empty_figure
 
 # Equation-box placement -> paper-coordinate anchors (shared with the per-series
@@ -197,15 +197,20 @@ def build(
         combined = _combine(data, srcs, s.get("op", "+"))
 
         kind = s.get("transform", transforms.NONE)
-        y_t, total = transforms.apply_transform(data[x_col], combined, kind)
+        y_t, _total = transforms.apply_transform(
+            data[x_col], combined, kind,
+            method=s.get("integral_method", "trapezoid"))
         scale = float(s.get("scale", 1.0) or 1.0)
         shift = float(s.get("displace", 0.0) or 0.0)
         y = y_t * scale + shift
 
+        # Report "break to zero" (energy depletion) — decoupled in graphs/report.
+        # Breaks at a chosen X *time*; discharge half is inverted to end at 0.
+        if s.get("break_time"):
+            y = report.break_to_zero(y, data[x_col], s.get("break_time"))
+
+        # Legend shows just the series name (no trailing ∫ total).
         name = s.get("name") or " + ".join(srcs)
-        if kind == transforms.INTEGRAL and total is not None:
-            # The integral's total value is its curve endpoint; surface it.
-            name = f"{name} [∫={total:.3g}]"
 
         axis = "right" if s.get("axis") == "right" else "left"
         yref = "y2" if axis == "right" else "y"

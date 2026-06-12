@@ -1,6 +1,6 @@
 """Shared callbacks for marks: add, list (with per-item + clear-all delete).
 
-Marks are stored per viewer (``{"dispersion": [...], "trend": [...],
+Marks are stored per viewer (``{"dispersion": [...],
 "multi_trend": [...]}``) so each graph keeps its own marks.
 """
 
@@ -13,8 +13,7 @@ from dash.exceptions import PreventUpdate
 from ..config import THEME
 from ..ui import theme as T
 
-_VIEW_TO_KEY = {"dispersion": "dispersion", "trend": "trend",
-                "multi_trend": "multi_trend"}
+_VIEW_TO_KEY = {"dispersion": "dispersion", "multi_trend": "multi_trend"}
 
 
 def _fmt(v) -> str:
@@ -52,16 +51,24 @@ def _describe(mark) -> str:
 
 def register(app: Dash) -> None:
 
-    # Only show the y input when adding a point mark.
+    # Show the y input only for a point mark, and hint the expected value format
+    # in the value box (a vertical/point mark on a time axis takes a datetime).
     @app.callback(
         Output("mark-y", "style"),
+        Output("mark-x", "placeholder"),
         Input("mark-kind", "value"),
         State("mark-y", "style"),
     )
     def toggle_y(kind, style):
         style = dict(style or {})
         style["display"] = "inline-block" if kind == "point" else "none"
-        return style
+        if kind == "h":
+            placeholder = "y value (number)"
+        elif kind == "v":
+            placeholder = "x: YYYY-MM-DD HH:MM or number"
+        else:  # point
+            placeholder = "x: YYYY-MM-DD HH:MM or number"
+        return style, placeholder
 
     # --- Add a mark to the active viewer ----------------------------------- #
     @app.callback(
@@ -76,7 +83,7 @@ def register(app: Dash) -> None:
         prevent_initial_call=True,
     )
     def add_mark(_n, kind, x_val, y_val, label, active, marks):
-        marks = marks or {"dispersion": [], "trend": [], "multi_trend": []}
+        marks = marks or {"dispersion": [], "multi_trend": []}
         key = _VIEW_TO_KEY.get(active)
         if key is None:
             raise PreventUpdate
@@ -111,7 +118,7 @@ def register(app: Dash) -> None:
         prevent_initial_call=True,
     )
     def clear_marks(_n, active, marks):
-        marks = marks or {"dispersion": [], "trend": [], "multi_trend": []}
+        marks = marks or {"dispersion": [], "multi_trend": []}
         key = _VIEW_TO_KEY.get(active)
         if key is None:
             raise PreventUpdate
