@@ -32,7 +32,8 @@ def _parse_pos(raw, allow_datetime: bool = True):
     except (TypeError, ValueError):
         pass
     if allow_datetime:
-        ts = pd.to_datetime(raw, dayfirst=True, errors="coerce")
+        # Day-LAST so a typed mark reads as YYYY-MM-DD (month before day).
+        ts = pd.to_datetime(raw, dayfirst=False, errors="coerce")
         if pd.notna(ts):
             return ts.isoformat()
     return None

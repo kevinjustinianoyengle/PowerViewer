@@ -146,7 +146,11 @@ open at a time (`ribbon-open` store), and switching viewer closes it.
 - **⚐ Marks** — the horizontal type → value → (y) → label → [+] controls + the
   pill history (`callbacks/marks_callbacks.py`). The value box's **placeholder
   hints the format** per type (a vertical/point mark on a time axis takes
-  `YYYY-MM-DD HH:MM`, parsed day-first; numbers also work).
+  `YYYY-MM-DD HH:MM`; numbers also work). Typed mark times are parsed
+  **day-last** (`_parse_pos` uses `dayfirst=False`), so `MM-DD` reads as
+  month-then-day (ISO `YYYY-MM-DD` is unambiguous either way). NB this differs
+  from the **Break** tool and the CSV datetime loader, which still parse
+  **day-first**.
 - **⚙ View** — the active viewer's own controls (label changes per viewer:
   *Distribution* / *Display*); the two per-viewer option divs
   (`dispersion-options` / `multi-options`) live inside and are toggled by
