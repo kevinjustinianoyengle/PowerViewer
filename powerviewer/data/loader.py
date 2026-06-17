@@ -150,7 +150,14 @@ def _coerce_datetimes(df: pd.DataFrame) -> pd.DataFrame:
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                parsed = pd.to_datetime(df[col], dayfirst=True, errors="coerce")
+                # ``format="mixed"`` parses each value by its own format, so a
+                # column whose rows mix date-only and date+time (e.g. a first
+                # row of ``04-06-2026`` followed by ``04-06-2026 0:01:00``) is
+                # still recognised. Without it, pandas infers one format from
+                # the first value and the rest coerce to NaT.
+                parsed = pd.to_datetime(
+                    df[col], dayfirst=True, errors="coerce", format="mixed"
+                )
         except Exception:  # noqa: BLE001
             continue
         if parsed.notna().mean() >= 0.8:
