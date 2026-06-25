@@ -180,7 +180,7 @@ def register(app: Dash) -> None:
         return store
 
     # --- Add derivative / integral of a series' source --------------------- #
-    def _add(kind, store, method="trapezoid"):
+    def _add(kind, store, method="trapezoid", window=None):
         trig = ctx.triggered_id
         if not trig or not ctx.triggered or not ctx.triggered[0]["value"]:
             raise PreventUpdate
@@ -199,6 +199,10 @@ def register(app: Dash) -> None:
                "scale": 1.0, "displace": 0.0}
         if kind == "integral":
             new["integral_method"] = method
+        # Freeze the transform to the X window visible at creation time (the
+        # current zoom). None = not zoomed -> computed over the whole series.
+        if window and window[0] is not None and window[1] is not None:
+            new["window"] = list(window)
         # Keep single-source curves on "source" (so the var panel highlights),
         # multi-source (combined) curves on "sources" + their operator.
         if len(srcs) == 1:
@@ -213,20 +217,22 @@ def register(app: Dash) -> None:
     @app.callback(
         Output("multi-store", "data", allow_duplicate=True),
         Input({"type": f"{PREFIX}-add-d", "index": ALL}, "n_clicks"),
+        State("multi-graph", "relayoutData"),
         State("multi-store", "data"),
         prevent_initial_call=True,
     )
-    def add_derivative(_c, store):
-        return _add("derivative", store)
+    def add_derivative(_c, relayout, store):
+        return _add("derivative", store, window=_zoom_xrange(relayout))
 
     @app.callback(
         Output("multi-store", "data", allow_duplicate=True),
         Input({"type": f"{PREFIX}-add-i", "index": ALL}, "n_clicks"),
         State({"type": f"{PREFIX}-int-method", "index": ALL}, "value"),
+        State("multi-graph", "relayoutData"),
         State("multi-store", "data"),
         prevent_initial_call=True,
     )
-    def add_integral(_c, _methods, store):
+    def add_integral(_c, _methods, relayout, store):
         # Use the integration rule chosen on the *clicked* series' chip.
         trig = ctx.triggered_id
         method = "trapezoid"
@@ -235,7 +241,7 @@ def register(app: Dash) -> None:
                 if st.get("id", {}).get("index") == trig.get("index"):
                     method = st.get("value") or "trapezoid"
                     break
-        return _add("integral", store, method)
+        return _add("integral", store, method, window=_zoom_xrange(relayout))
 
     # --- Delete a series --------------------------------------------------- #
     @app.callback(

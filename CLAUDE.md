@@ -225,6 +225,18 @@ and **Remove series**. The legend shows just the series **name** (the integral's
 running total is computed but **not** appended). Clearing a scale/displacement box
 keeps the previous value (identity fallback scale 1, displacement 0).
 
+**Zoom-windowed transforms**: when **+ d/dx** / **+ ∫** is pressed while the
+graph is zoomed in on the X axis, the new derivative/integral is computed over
+**only the visible X window** (so e.g. the cumulative integral restarts at zero
+from the left edge of the zoom). The window is captured at creation time from the
+graph's `relayoutData` (`multi_callbacks._zoom_xrange`) and **frozen** onto the
+series as `window=[lo, hi]`; `series_figure.build` slices the source rows to that
+window before applying the transform. Later zooming in/out does **not** recompute
+it — the curve stays as drawn (only the regression *fit* tracks live zoom). To
+recompute for a different window, **delete** the derivative/integral and re-add it
+at the new zoom. Pressing the buttons while fully zoomed out stores no window, so
+the transform spans the whole series as before.
+
 **Time-aware maths** (`graphs/transforms.py`): derivative and integral integrate
 against the **real timestamps**, measured in **elapsed hours** (NaT-safe), so
 minute-resolution data contributes `y · (1/60)` per step — power integrates

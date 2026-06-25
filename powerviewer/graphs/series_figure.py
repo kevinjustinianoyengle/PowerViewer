@@ -194,6 +194,24 @@ def build(
         data = data.dropna(subset=[*srcs, x_col]).sort_values(x_col)
         if data.empty:
             continue
+
+        # A derivative/integral series may carry the X ``window`` it was created
+        # in (the zoom at the moment it was added). The transform is computed
+        # over just that slice and then frozen — later zooming does NOT recompute
+        # it, so the cumulative integral / derivative stays as drawn. To
+        # recompute for a different window, delete the series and re-add it.
+        win = s.get("window")
+        if win and win[0] is not None and win[1] is not None:
+            xv = data[x_col]
+            lo, hi = win
+            if pd.api.types.is_datetime64_any_dtype(xv):
+                lo, hi = pd.to_datetime(lo), pd.to_datetime(hi)
+            if lo > hi:
+                lo, hi = hi, lo
+            data = data[(xv >= lo) & (xv <= hi)]
+            if data.empty:
+                continue
+
         combined = _combine(data, srcs, s.get("op", "+"))
 
         kind = s.get("transform", transforms.NONE)
