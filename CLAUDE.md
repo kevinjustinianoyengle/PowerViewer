@@ -316,10 +316,25 @@ Implemented once in `graphs/base.py`:
   convention — **decimal comma** and **thousands dot** (e.g. `-8,77E-02`,
   `1.234,5`) — so values parse as real numbers; `,`/tab files use the US
   convention. UTF-8/Latin-1 encodings are both handled.
+- **Blank-cell handling** (`_read_csv`): cells exported as a single space (a
+  common artefact) are treated as missing — `read_csv` is called with
+  `skipinitialspace=True` and `na_values=[" ", ""]`. Left as text, one such
+  value would keep the whole column as `object` and block numeric/datetime
+  detection, dropping the column from the plottable list.
+- **Excel via CSV** (`_read_excel_via_csv`): `.xlsx` / `.xls` files are first
+  read with `pandas.read_excel`, written to a **temp CSV** (in the system temp
+  dir, *not* the data folder, so it never shows in the file chooser), then loaded
+  back through `_read_csv`. This keeps blank handling and datetime detection
+  identical for both formats.
 - **Datetime detection** (`_coerce_datetimes`): text columns whose values look
   like dates/times are parsed **day-first** (e.g. `06-06-2026 8:00:00`) and
   converted to datetime dtype, so a time column like `PeriodStartTime` becomes
-  selectable on the trend X axis.
+  selectable on the trend X axis. Parsing uses `format="mixed"` so a column whose
+  rows mix date-only and date+time (e.g. `04-06-2026` then `04-06-2026 0:01:00`)
+  is still recognised — without it pandas ≥3 infers one format from the first
+  value and coerces the rest to `NaT`. The ≥0.8 parse threshold is computed over
+  the **populated rows only** (`df[col].notna()`), so a half-blank date column
+  still counts when its non-empty rows all parse.
 
 ## Extending PowerViewer (add a new viewer)
 
