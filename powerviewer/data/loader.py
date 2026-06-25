@@ -12,6 +12,7 @@ small file/column metadata travels to the browser; the bulky frame stays here.
 from __future__ import annotations
 
 import sqlite3
+import tempfile
 import warnings
 from functools import lru_cache
 from pathlib import Path
@@ -60,7 +61,7 @@ def _read(path_str: str, table: str | None) -> pd.DataFrame:
     if suffix == ".csv":
         df = _read_csv(path)
     elif suffix in (".xlsx", ".xls"):
-        df = pd.read_excel(path)
+        df = _read_excel_via_csv(path)
     elif _is_sqlite(path):
         with sqlite3.connect(str(path)) as conn:
             if table is None:
@@ -119,9 +120,36 @@ def _sniff_csv(path: Path) -> tuple[str, dict]:
 
 
 def _read_csv(path: Path) -> pd.DataFrame:
-    """Read a CSV, auto-detecting delimiter and decimal/thousands marks."""
+    """Read a CSV, auto-detecting delimiter and decimal/thousands marks.
+
+    Blank cells are often exported as a single space rather than an empty
+    field; left as-is they keep a whole column as text and block numeric /
+    datetime detection. ``skipinitialspace`` + treating space/empty as NA turns
+    those into proper missing values so the rest of the column parses cleanly.
+    """
     encoding, kwargs = _sniff_csv(path)
-    return pd.read_csv(path, encoding=encoding, **kwargs)
+    return pd.read_csv(
+        path,
+        encoding=encoding,
+        skipinitialspace=True,
+        na_values=[" ", ""],
+        keep_default_na=True,
+        **kwargs,
+    )
+
+
+def _read_excel_via_csv(path: Path) -> pd.DataFrame:
+    """Read an Excel workbook by first converting it to CSV, then loading that
+    CSV through the normal CSV pipeline.
+
+    Routing Excel through CSV keeps blank handling and datetime detection
+    identical for both formats. The intermediate CSV is written to a temp file
+    (not the data folder) so it never shows up in the file chooser.
+    """
+    raw = pd.read_excel(path)
+    tmp = Path(tempfile.gettempdir()) / f"{path.stem}__pv_from_xlsx.csv"
+    raw.to_csv(tmp, index=False)
+    return _read_csv(tmp)
 
 
 # --------------------------------------------------------------------------- #
@@ -160,7 +188,11 @@ def _coerce_datetimes(df: pd.DataFrame) -> pd.DataFrame:
                 )
         except Exception:  # noqa: BLE001
             continue
-        if parsed.notna().mean() >= 0.8:
+        # Judge the parse over the rows that actually hold a value: a column
+        # that is half blank (a common export artefact) should still count as a
+        # date column when the populated rows all parse.
+        src_present = df[col].notna()
+        if src_present.sum() and parsed[src_present].notna().mean() >= 0.8:
             df[col] = parsed
     return df
 
